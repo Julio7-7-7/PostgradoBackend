@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -8,7 +8,7 @@ class Modulo(Base):
 
     id_modulo = Column(Integer, primary_key=True, index=True, autoincrement=True)
     id_programa_version = Column(Integer, ForeignKey("programas_version.id_programa_version"), nullable=False)
-    sigla = Column(String(20), nullable=False)
+    sigla = Column(String(20), nullable=False, unique=True)
     nombre_modulo = Column(String(200), nullable=False)
     horas_academicas = Column(Integer, nullable=False)
     creditos = Column(Integer, nullable=False)
