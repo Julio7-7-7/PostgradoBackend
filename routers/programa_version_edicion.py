@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
-from datetime import datetime
+from datetime import date, datetime
 from database import get_db
 from models.programa_version_edicion import ProgramaVersionEdicion
 from models.programa_version import ProgramaVersion
@@ -35,6 +35,47 @@ def validar_cupo(data, db):
                 detail=f"El cupo máximo ({data.cupo_maximo}) no puede ser menor al cupo mínimo del tipo de programa ({tipo.cupo_minimo})"
             )
 
+def obtener_tipo_programa(db: Session, id_programa_version: int) -> TipoPrograma:
+    pv = db.query(ProgramaVersion).filter(
+        ProgramaVersion.id_programa_version == id_programa_version
+    ).first()
+    if not pv:
+        raise HTTPException(status_code=404, detail="Versión no encontrada")
+    programa = db.query(Programa).filter(Programa.id_programa == pv.id_programa).first()
+    if not programa:
+        raise HTTPException(status_code=404, detail="Programa no encontrado")
+    tipo = db.query(TipoPrograma).filter(TipoPrograma.id_tipo_programa == programa.id_tipo_programa).first()
+    if not tipo:
+        raise HTTPException(status_code=404, detail="Tipo de programa no encontrado")
+    return tipo
+
+def validar_fechas(fecha_inicio: date | None, fecha_fin: date | None, tipo: TipoPrograma):
+    hoy = date.today()
+
+    if fecha_inicio and fecha_inicio < hoy:
+        raise HTTPException(
+            status_code=400,
+            detail="La fecha de inicio no puede ser anterior al día de hoy"
+        )
+
+    if fecha_inicio and fecha_fin:
+        if fecha_fin <= fecha_inicio:
+            raise HTTPException(
+                status_code=400,
+                detail="La fecha de fin debe ser posterior a la fecha de inicio"
+            )
+
+        if tipo.duracion_minima_meses:
+            diff_meses = (fecha_fin.year - fecha_inicio.year) * 12 + (fecha_fin.month - fecha_inicio.month)
+            if fecha_fin.day < fecha_inicio.day:
+                diff_meses -= 1
+
+            if diff_meses < tipo.duracion_minima_meses:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"La duración mínima para este tipo de programa ({tipo.nombre}) es de {tipo.duracion_minima_meses} mes(es)"
+                )
+
 def query_base(db):
     return db.query(ProgramaVersionEdicion).options(
         joinedload(ProgramaVersionEdicion.programa_version)
@@ -46,6 +87,9 @@ def query_base(db):
 @router.post("/", response_model=ProgramaVersionEdicionResponse, status_code=201)
 def crear(data: ProgramaVersionEdicionCreate, db: Session = Depends(get_db)):
     validar_cupo(data, db)
+    tipo = obtener_tipo_programa(db, data.id_programa_version)
+    validar_fechas(data.fecha_inicio, data.fecha_fin, tipo)
+
     ultima = db.query(ProgramaVersionEdicion).filter(
         ProgramaVersionEdicion.id_programa_version == data.id_programa_version
     ).count()
@@ -98,10 +142,22 @@ def editar(id: int, data: ProgramaVersionEdicionUpdate, db: Session = Depends(ge
     ).first()
     if not pve:
         raise HTTPException(status_code=404, detail="No encontrado")
+
     if data.cupo_maximo:
         validar_cupo(data, db)
-    for key, value in data.model_dump(exclude_unset=True).items():
+
+    update_data = data.model_dump(exclude_unset=True)
+    tiene_fechas = "fecha_inicio" in update_data or "fecha_fin" in update_data
+
+    if tiene_fechas:
+        tipo = obtener_tipo_programa(db, pve.id_programa_version)
+        fecha_inicio = update_data.get("fecha_inicio", pve.fecha_inicio)
+        fecha_fin = update_data.get("fecha_fin", pve.fecha_fin)
+        validar_fechas(fecha_inicio, fecha_fin, tipo)
+
+    for key, value in update_data.items():
         setattr(pve, key, value)
+
     db.commit()
     pve = query_base(db).filter(
         ProgramaVersionEdicion.id_programa_version_edicion == id
