@@ -10,6 +10,7 @@ class TipoProgramaBase(BaseModel):
     nombre: str
     estado: EstadoEnum = EstadoEnum.activo
     cupo_minimo: int | None = None
+    duracion_minima_meses: int | None = None
 
     @field_validator("nombre")
     @classmethod
@@ -27,6 +28,13 @@ class TipoProgramaBase(BaseModel):
             raise ValueError("El cupo mínimo debe ser mayor a 0")
         return v
 
+    @field_validator("duracion_minima_meses")
+    @classmethod
+    def validar_duracion(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError("La duración mínima debe ser mayor a 0")
+        return v
+
 class TipoProgramaCreate(TipoProgramaBase):
     pass
 
@@ -34,6 +42,7 @@ class TipoProgramaUpdate(BaseModel):
     nombre: str | None = None
     estado: EstadoEnum | None = None
     cupo_minimo: int | None = None
+    duracion_minima_meses: int | None = None
 
 class TipoProgramaResponse(TipoProgramaBase):
     id_tipo_programa: int

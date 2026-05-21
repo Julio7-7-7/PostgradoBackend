@@ -14,6 +14,7 @@ class ProgramaVersion(Base):
     id_programa = Column(Integer, ForeignKey("programas.id_programa"), nullable=False)
     version = Column(Integer, nullable=False)
     descripcion = Column(String(500), nullable=True)
+    foto = Column(String(500), nullable=True)
     vigente = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
