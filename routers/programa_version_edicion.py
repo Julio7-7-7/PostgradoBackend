@@ -15,7 +15,21 @@ router = APIRouter(
     tags=["Programa Version Edicion"]
 )
 
-def calcular_gestion():
+def calcular_gestion(db: Session, id_programa_version: int) -> str:
+    ultima = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version == id_programa_version
+    ).order_by(ProgramaVersionEdicion.created_at.desc()).first()
+
+    if ultima and ultima.gestion:
+        partes = ultima.gestion.split("-")
+        if len(partes) == 2:
+            mitad = int(partes[0])
+            anio = int(partes[1])
+            if mitad == 1:
+                return f"2-{anio}"
+            else:
+                return f"1-{anio + 1}"
+
     ahora = datetime.now()
     mitad = 1 if ahora.month <= 6 else 2
     return f"{mitad}-{ahora.year}"
@@ -76,6 +90,42 @@ def validar_fechas(fecha_inicio: date | None, fecha_fin: date | None, tipo: Tipo
                     detail=f"La duración mínima para este tipo de programa ({tipo.nombre}) es de {tipo.duracion_minima_meses} mes(es)"
                 )
 
+def validar_fecha_inicio_unica(db: Session, id_programa_version: int, fecha_inicio: date | None, excluir_id: int | None = None):
+    if not fecha_inicio:
+        return
+    query = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version == id_programa_version,
+        ProgramaVersionEdicion.fecha_inicio == fecha_inicio
+    )
+    if excluir_id:
+        query = query.filter(ProgramaVersionEdicion.id_programa_version_edicion != excluir_id)
+    if query.first():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ya existe una edición con fecha de inicio {fecha_inicio} para esta versión"
+        )
+
+def validar_gestion_fecha(gestion: str | None, fecha_inicio: date | None):
+    if not gestion or not fecha_inicio:
+        return
+    partes = gestion.split("-")
+    if len(partes) != 2:
+        return
+    try:
+        mitad = int(partes[0])
+    except ValueError:
+        return
+    if mitad == 1 and fecha_inicio.month > 6:
+        raise HTTPException(
+            status_code=400,
+            detail=f"La gestión {gestion} corresponde al primer semestre, pero la fecha {fecha_inicio} está en el segundo"
+        )
+    if mitad == 2 and fecha_inicio.month <= 6:
+        raise HTTPException(
+            status_code=400,
+            detail=f"La gestión {gestion} corresponde al segundo semestre, pero la fecha {fecha_inicio} está en el primero"
+        )
+
 def query_base(db):
     return db.query(ProgramaVersionEdicion).options(
         joinedload(ProgramaVersionEdicion.programa_version)
@@ -89,11 +139,14 @@ def crear(data: ProgramaVersionEdicionCreate, db: Session = Depends(get_db)):
     validar_cupo(data, db)
     tipo = obtener_tipo_programa(db, data.id_programa_version)
     validar_fechas(data.fecha_inicio, data.fecha_fin, tipo)
+    validar_fecha_inicio_unica(db, data.id_programa_version, data.fecha_inicio)
+
+    gestion = data.gestion if data.gestion else calcular_gestion(db, data.id_programa_version)
+    validar_gestion_fecha(gestion, data.fecha_inicio)
 
     ultima = db.query(ProgramaVersionEdicion).filter(
         ProgramaVersionEdicion.id_programa_version == data.id_programa_version
     ).count()
-    gestion = data.gestion if data.gestion else calcular_gestion()
     data_dict = data.model_dump(exclude={"gestion"})
     nueva = ProgramaVersionEdicion(
         **data_dict,
@@ -154,6 +207,13 @@ def editar(id: int, data: ProgramaVersionEdicionUpdate, db: Session = Depends(ge
         fecha_inicio = update_data.get("fecha_inicio", pve.fecha_inicio)
         fecha_fin = update_data.get("fecha_fin", pve.fecha_fin)
         validar_fechas(fecha_inicio, fecha_fin, tipo)
+        if "fecha_inicio" in update_data:
+            validar_fecha_inicio_unica(db, pve.id_programa_version, fecha_inicio, excluir_id=id)
+
+    if "gestion" in update_data or "fecha_inicio" in update_data:
+        gestion = update_data.get("gestion", pve.gestion)
+        fecha_inicio = update_data.get("fecha_inicio", pve.fecha_inicio)
+        validar_gestion_fecha(gestion, fecha_inicio)
 
     for key, value in update_data.items():
         setattr(pve, key, value)
