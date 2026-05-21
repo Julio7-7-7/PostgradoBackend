@@ -5,6 +5,7 @@ from schemas.programa import ProgramaResponse
 class ProgramaVersionBase(BaseModel):
     id_programa: int
     descripcion: str | None = None
+    foto: str | None = None
     vigente: bool = True
 
 class ProgramaVersionCreate(ProgramaVersionBase):
@@ -12,6 +13,7 @@ class ProgramaVersionCreate(ProgramaVersionBase):
 
 class ProgramaVersionUpdate(BaseModel):
     descripcion: str | None = None
+    foto: str | None = None
     vigente: bool | None = None
 
 class ProgramaVersionResponse(ProgramaVersionBase):
