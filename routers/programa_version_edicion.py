@@ -63,10 +63,12 @@ def obtener_tipo_programa(db: Session, id_programa_version: int) -> TipoPrograma
         raise HTTPException(status_code=404, detail="Tipo de programa no encontrado")
     return tipo
 
-def validar_fechas(fecha_inicio: date | None, fecha_fin: date | None, tipo: TipoPrograma):
+def validar_fechas(fecha_inicio: date | None, fecha_fin: date | None, tipo: TipoPrograma, *, es_historico: bool = False):
     hoy = date.today()
 
-    if fecha_inicio and fecha_inicio < hoy:
+    if es_historico:
+        pass
+    elif fecha_inicio and fecha_inicio < hoy:
         raise HTTPException(
             status_code=400,
             detail="La fecha de inicio no puede ser anterior al día de hoy"
@@ -90,8 +92,10 @@ def validar_fechas(fecha_inicio: date | None, fecha_fin: date | None, tipo: Tipo
                     detail=f"La duración mínima para este tipo de programa ({tipo.nombre}) es de {tipo.duracion_minima_meses} mes(es)"
                 )
 
-def validar_fecha_inicio_unica(db: Session, id_programa_version: int, fecha_inicio: date | None, excluir_id: int | None = None):
+def validar_fecha_inicio_unica(db: Session, id_programa_version: int, fecha_inicio: date | None, excluir_id: int | None = None, *, es_historico: bool = False):
     if not fecha_inicio:
+        return
+    if es_historico:
         return
     query = db.query(ProgramaVersionEdicion).filter(
         ProgramaVersionEdicion.id_programa_version == id_programa_version,
@@ -105,8 +109,8 @@ def validar_fecha_inicio_unica(db: Session, id_programa_version: int, fecha_inic
             detail=f"Ya existe una edición con fecha de inicio {fecha_inicio} para esta versión"
         )
 
-def validar_gestion_fecha(gestion: str | None, fecha_inicio: date | None):
-    if not gestion or not fecha_inicio:
+def validar_gestion_fecha(gestion: str | None, fecha_inicio: date | None, *, es_historico: bool = False):
+    if not gestion or not fecha_inicio or es_historico:
         return
     partes = gestion.split("-")
     if len(partes) != 2:
@@ -134,15 +138,22 @@ def query_base(db):
         joinedload(ProgramaVersionEdicion.modalidad)
     )
 
+def es_version_historico(db: Session, id_programa_version: int) -> bool:
+    pv = db.query(ProgramaVersion).filter(
+        ProgramaVersion.id_programa_version == id_programa_version
+    ).first()
+    return pv.es_historico if pv else False
+
 @router.post("/", response_model=ProgramaVersionEdicionResponse, status_code=201)
 def crear(data: ProgramaVersionEdicionCreate, db: Session = Depends(get_db)):
+    historico = es_version_historico(db, data.id_programa_version)
     validar_cupo(data, db)
     tipo = obtener_tipo_programa(db, data.id_programa_version)
-    validar_fechas(data.fecha_inicio, data.fecha_fin, tipo)
-    validar_fecha_inicio_unica(db, data.id_programa_version, data.fecha_inicio)
+    validar_fechas(data.fecha_inicio, data.fecha_fin, tipo, es_historico=historico)
+    validar_fecha_inicio_unica(db, data.id_programa_version, data.fecha_inicio, es_historico=historico)
 
     gestion = data.gestion if data.gestion else calcular_gestion(db, data.id_programa_version)
-    validar_gestion_fecha(gestion, data.fecha_inicio)
+    validar_gestion_fecha(gestion, data.fecha_inicio, es_historico=historico)
 
     ultima = db.query(ProgramaVersionEdicion).filter(
         ProgramaVersionEdicion.id_programa_version == data.id_programa_version
@@ -201,19 +212,20 @@ def editar(id: int, data: ProgramaVersionEdicionUpdate, db: Session = Depends(ge
 
     update_data = data.model_dump(exclude_unset=True)
     tiene_fechas = "fecha_inicio" in update_data or "fecha_fin" in update_data
+    historico = es_version_historico(db, pve.id_programa_version)
 
     if tiene_fechas:
         tipo = obtener_tipo_programa(db, pve.id_programa_version)
         fecha_inicio = update_data.get("fecha_inicio", pve.fecha_inicio)
         fecha_fin = update_data.get("fecha_fin", pve.fecha_fin)
-        validar_fechas(fecha_inicio, fecha_fin, tipo)
+        validar_fechas(fecha_inicio, fecha_fin, tipo, es_historico=historico)
         if "fecha_inicio" in update_data:
-            validar_fecha_inicio_unica(db, pve.id_programa_version, fecha_inicio, excluir_id=id)
+            validar_fecha_inicio_unica(db, pve.id_programa_version, fecha_inicio, excluir_id=id, es_historico=historico)
 
     if "gestion" in update_data or "fecha_inicio" in update_data:
         gestion = update_data.get("gestion", pve.gestion)
         fecha_inicio = update_data.get("fecha_inicio", pve.fecha_inicio)
-        validar_gestion_fecha(gestion, fecha_inicio)
+        validar_gestion_fecha(gestion, fecha_inicio, es_historico=historico)
 
     for key, value in update_data.items():
         setattr(pve, key, value)
