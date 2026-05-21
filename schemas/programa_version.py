@@ -20,6 +20,7 @@ class ProgramaVersionResponse(ProgramaVersionBase):
     id_programa_version: int
     version: int
     programa: ProgramaResponse
+    ediciones_count: int = 0
     created_at: datetime
     updated_at: datetime
 

@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from database import get_db
 from models.programa import Programa
 from models.programa_version import ProgramaVersion
+from models.programa_version_edicion import ProgramaVersionEdicion
 from schemas.programa_version import ProgramaVersionCreate, ProgramaVersionUpdate, ProgramaVersionResponse
 import base64
 import uuid
@@ -74,7 +75,12 @@ def crear(data: ProgramaVersionCreate, db: Session = Depends(get_db)):
 
 @router.get("/", response_model=list[ProgramaVersionResponse])
 def listar(db: Session = Depends(get_db)):
-    return db.query(ProgramaVersion).options(joinedload(ProgramaVersion.programa)).all()
+    versiones = db.query(ProgramaVersion).options(joinedload(ProgramaVersion.programa)).all()
+    for pv in versiones:
+        pv.ediciones_count = db.query(ProgramaVersionEdicion).filter(
+            ProgramaVersionEdicion.id_programa_version == pv.id_programa_version
+        ).count()
+    return versiones
 
 @router.get("/{id}", response_model=ProgramaVersionResponse)
 def obtener(id: int, db: Session = Depends(get_db)):
@@ -83,6 +89,9 @@ def obtener(id: int, db: Session = Depends(get_db)):
     ).first()
     if not pv:
         raise HTTPException(status_code=404, detail="No encontrado")
+    pv.ediciones_count = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version == id
+    ).count()
     return pv
 
 @router.patch("/{id}", response_model=ProgramaVersionResponse)
@@ -109,4 +118,7 @@ def editar(id: int, data: ProgramaVersionUpdate, db: Session = Depends(get_db)):
 
     db.commit()
     db.refresh(pv)
+    pv.ediciones_count = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version == id
+    ).count()
     return pv
