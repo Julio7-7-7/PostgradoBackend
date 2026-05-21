@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 from database import get_db
 from models.modulo import Modulo
+from models.programa_version_edicion import ProgramaVersionEdicion
 from schemas.modulo import ModuloCreate, ModuloUpdate, ModuloResponse
 
 router = APIRouter(
@@ -12,6 +13,15 @@ router = APIRouter(
 
 @router.post("/", response_model=ModuloResponse, status_code=201)
 def crear(data: ModuloCreate, db: Session = Depends(get_db)):
+    ediciones = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version == data.id_programa_version
+    ).count()
+    if ediciones > 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No se pueden agregar módulos a una versión que ya tiene ediciones creadas"
+        )
+
     existente = db.query(Modulo).filter(Modulo.sigla == data.sigla).first()
     if existente:
         raise HTTPException(status_code=400, detail="Ya existe un módulo con esa sigla")
@@ -45,6 +55,16 @@ def editar(id: int, data: ModuloUpdate, db: Session = Depends(get_db)):
     modulo = db.query(Modulo).options(joinedload(Modulo.programa_version)).filter(Modulo.id_modulo == id).first()
     if not modulo:
         raise HTTPException(status_code=404, detail="No encontrado")
+
+    if data.estado == "inactivo":
+        ediciones = db.query(ProgramaVersionEdicion).filter(
+            ProgramaVersionEdicion.id_programa_version == modulo.id_programa_version
+        ).count()
+        if ediciones > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="No se pueden desactivar módulos de una versión que ya tiene ediciones creadas"
+            )
 
     if data.sigla and data.sigla != modulo.sigla:
         existente = db.query(Modulo).filter(
