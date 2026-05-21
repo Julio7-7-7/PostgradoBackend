@@ -5,6 +5,7 @@ from schemas.tipo_programa import TipoProgramaResponse, EstadoEnum
 class ProgramaBase(BaseModel):
     id_tipo_programa: int
     nombre_programa: str
+    foto: str | None = None
     estado: EstadoEnum = EstadoEnum.activo
 
     @field_validator("nombre_programa")
@@ -22,6 +23,7 @@ class ProgramaCreate(ProgramaBase):
 class ProgramaUpdate(BaseModel):
     id_tipo_programa: int | None = None
     nombre_programa: str | None = None
+    foto: str | None = None
     estado: EstadoEnum | None = None
 
 class ProgramaResponse(ProgramaBase):

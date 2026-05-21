@@ -56,6 +56,20 @@ class ProgramaVersionEdicionUpdate(BaseModel):
     descripcion: str | None = None
     precio: float | None = None
 
+    @field_validator("cupo_maximo")
+    @classmethod
+    def validar_cupo_maximo(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError("El cupo máximo debe ser mayor a 0")
+        return v
+
+    @field_validator("precio")
+    @classmethod
+    def validar_precio(cls, v):
+        if v is not None and v < 0:
+            raise ValueError("El precio no puede ser negativo")
+        return v
+
 class ProgramaVersionEdicionResponse(ProgramaVersionEdicionBase):
     id_programa_version_edicion: int
     edicion: int

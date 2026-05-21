@@ -16,7 +16,7 @@ class EstadoDetalleEnum(str, Enum):
 class DetalleProgramaModuloBase(BaseModel):
     id_programa_version_edicion: int
     id_modulo: int
-    id_docente: int
+    id_docente: int | None = None
     id_modalidad: int | None = None
     orden: int
     fecha_inicio: date | None = None
