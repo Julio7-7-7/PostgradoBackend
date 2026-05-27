@@ -16,7 +16,6 @@ class ProgramaVersion(Base):
     descripcion = Column(String(500), nullable=True)
     foto = Column(String(500), nullable=True)
     vigente = Column(Boolean, default=True, nullable=False)
-    es_historico = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 

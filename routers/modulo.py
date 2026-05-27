@@ -17,14 +17,15 @@ def crear(data: ModuloCreate, db: Session = Depends(get_db)):
     pv = db.query(ProgramaVersion).filter(
         ProgramaVersion.id_programa_version == data.id_programa_version
     ).first()
-    if pv and not pv.es_historico:
-        ediciones = db.query(ProgramaVersionEdicion).filter(
-            ProgramaVersionEdicion.id_programa_version == data.id_programa_version
+    if pv:
+        ediciones_activas = db.query(ProgramaVersionEdicion).filter(
+            ProgramaVersionEdicion.id_programa_version == data.id_programa_version,
+            ProgramaVersionEdicion.es_historico == False
         ).count()
-        if ediciones > 0:
+        if ediciones_activas > 0:
             raise HTTPException(
                 status_code=400,
-                detail="No se pueden agregar módulos a una versión que ya tiene ediciones creadas"
+                detail="Esta versión tiene ediciones no históricas registradas. No es posible añadir nuevos módulos."
             )
 
     existente = db.query(Modulo).filter(Modulo.sigla == data.sigla).first()
@@ -45,8 +46,11 @@ def crear(data: ModuloCreate, db: Session = Depends(get_db)):
         )
 
 @router.get("/", response_model=list[ModuloResponse])
-def listar(db: Session = Depends(get_db)):
-    return db.query(Modulo).options(joinedload(Modulo.programa_version)).all()
+def listar(programa_version_id: int | None = None, db: Session = Depends(get_db)):
+    query = db.query(Modulo).options(joinedload(Modulo.programa_version))
+    if programa_version_id:
+        query = query.filter(Modulo.id_programa_version == programa_version_id)
+    return query.all()
 
 @router.get("/{id}", response_model=ModuloResponse)
 def obtener(id: int, db: Session = Depends(get_db)):
@@ -65,14 +69,15 @@ def editar(id: int, data: ModuloUpdate, db: Session = Depends(get_db)):
         pv = db.query(ProgramaVersion).filter(
             ProgramaVersion.id_programa_version == modulo.id_programa_version
         ).first()
-        if pv and not pv.es_historico:
-            ediciones = db.query(ProgramaVersionEdicion).filter(
-                ProgramaVersionEdicion.id_programa_version == modulo.id_programa_version
+        if pv:
+            ediciones_activas = db.query(ProgramaVersionEdicion).filter(
+                ProgramaVersionEdicion.id_programa_version == modulo.id_programa_version,
+                ProgramaVersionEdicion.es_historico == False
             ).count()
-            if ediciones > 0:
+            if ediciones_activas > 0:
                 raise HTTPException(
                     status_code=400,
-                    detail="No se pueden desactivar módulos de una versión que ya tiene ediciones creadas"
+                    detail="Esta versión tiene ediciones no históricas, por lo que no es posible desactivar módulos del plan de estudios."
                 )
 
     if data.sigla and data.sigla != modulo.sigla:

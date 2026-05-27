@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from models.detalle_programa_modulo import DetalleProgramaModulo
 from models.historial_modulo import HistorialModulo
@@ -11,6 +11,13 @@ router = APIRouter(
 )
 
 ESTADOS_CON_MOTIVO = {"pausado", "reprogramado", "cancelado"}
+
+def query_base(db):
+    return db.query(DetalleProgramaModulo).options(
+        joinedload(DetalleProgramaModulo.modulo),
+        joinedload(DetalleProgramaModulo.docente),
+        joinedload(DetalleProgramaModulo.modalidad),
+    )
 
 @router.post("/", response_model=DetalleProgramaModuloResponse, status_code=201)
 def crear(data: DetalleProgramaModuloCreate, db: Session = Depends(get_db)):
@@ -27,12 +34,15 @@ def crear(data: DetalleProgramaModuloCreate, db: Session = Depends(get_db)):
     return nuevo
 
 @router.get("/", response_model=list[DetalleProgramaModuloResponse])
-def listar(db: Session = Depends(get_db)):
-    return db.query(DetalleProgramaModulo).all()
+def listar(edicion_id: int | None = None, db: Session = Depends(get_db)):
+    query = query_base(db)
+    if edicion_id:
+        query = query.filter(DetalleProgramaModulo.id_programa_version_edicion == edicion_id)
+    return query.all()
 
 @router.get("/{id}", response_model=DetalleProgramaModuloResponse)
 def obtener(id: int, db: Session = Depends(get_db)):
-    detalle = db.query(DetalleProgramaModulo).filter(
+    detalle = query_base(db).filter(
         DetalleProgramaModulo.id_detalle_programa_modulo == id
     ).first()
     if not detalle:
@@ -41,7 +51,7 @@ def obtener(id: int, db: Session = Depends(get_db)):
 
 @router.patch("/{id}", response_model=DetalleProgramaModuloResponse)
 def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get_db)):
-    detalle = db.query(DetalleProgramaModulo).filter(
+    detalle = query_base(db).filter(
         DetalleProgramaModulo.id_detalle_programa_modulo == id
     ).first()
     if not detalle:
@@ -54,7 +64,6 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
                 status_code=400,
                 detail=f"El campo motivo es obligatorio cuando el estado es {data.estado}"
             )
-        # guardar historial automáticamente
         historial = HistorialModulo(
             id_detalle_programa_modulo=id,
             estado_anterior=detalle.estado,
@@ -66,7 +75,7 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
         db.add(historial)
 
     # validar orden si se cambia
-    if data.orden:
+    if data.orden is not None:
         orden_existente = db.query(DetalleProgramaModulo).filter(
             DetalleProgramaModulo.id_programa_version_edicion == detalle.id_programa_version_edicion,
             DetalleProgramaModulo.orden == data.orden,
@@ -79,15 +88,30 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
         setattr(detalle, key, value)
 
     db.commit()
-    db.refresh(detalle)
+    detalle = query_base(db).filter(
+        DetalleProgramaModulo.id_detalle_programa_modulo == id
+    ).first()
     return detalle
 
-@router.delete("/{id}", status_code=204)
-def eliminar(id: int, db: Session = Depends(get_db)):
-    detalle = db.query(DetalleProgramaModulo).filter(
+@router.patch("/{id}/cancelar", status_code=200)
+def cancelar(id: int, db: Session = Depends(get_db)):
+    detalle = query_base(db).filter(
         DetalleProgramaModulo.id_detalle_programa_modulo == id
     ).first()
     if not detalle:
         raise HTTPException(status_code=404, detail="No encontrado")
-    db.delete(detalle)
+    if detalle.estado == "cancelado":
+        raise HTTPException(status_code=400, detail="El módulo ya está cancelado")
+    historial = HistorialModulo(
+        id_detalle_programa_modulo=id,
+        estado_anterior=detalle.estado,
+        estado_nuevo="cancelado",
+        motivo="Cancelación manual",
+        fecha_inicio_original=detalle.fecha_inicio,
+        fecha_fin_original=detalle.fecha_fin
+    )
+    db.add(historial)
+    detalle.estado = "cancelado"
     db.commit()
+    db.refresh(detalle)
+    return detalle

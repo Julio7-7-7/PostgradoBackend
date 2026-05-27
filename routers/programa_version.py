@@ -15,9 +15,8 @@ router = APIRouter(
     tags=["Programas Version"]
 )
 
-MEDIA_DIR = Path(__file__).parent.parent / "media" / "versiones"
-
 FORMATOS_PERMITIDOS = {"jpeg", "jpg", "png", "gif", "webp"}
+MEDIA_DIR = Path(__file__).parent.parent / "media" / "versiones"
 
 def guardar_foto_base64(data_url: str) -> str:
     try:
@@ -73,13 +72,17 @@ def crear(data: ProgramaVersionCreate, db: Session = Depends(get_db)):
             detail="Conflicto: la versión ya fue creada por otra solicitud. Intente nuevamente."
         )
 
+def _set_ediciones_activas(pv, db):
+    pv.ediciones_count = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version == pv.id_programa_version,
+        ProgramaVersionEdicion.es_historico == False
+    ).count()
+
 @router.get("/", response_model=list[ProgramaVersionResponse])
 def listar(db: Session = Depends(get_db)):
     versiones = db.query(ProgramaVersion).options(joinedload(ProgramaVersion.programa)).all()
     for pv in versiones:
-        pv.ediciones_count = db.query(ProgramaVersionEdicion).filter(
-            ProgramaVersionEdicion.id_programa_version == pv.id_programa_version
-        ).count()
+        _set_ediciones_activas(pv, db)
     return versiones
 
 @router.get("/{id}", response_model=ProgramaVersionResponse)
@@ -89,9 +92,7 @@ def obtener(id: int, db: Session = Depends(get_db)):
     ).first()
     if not pv:
         raise HTTPException(status_code=404, detail="No encontrado")
-    pv.ediciones_count = db.query(ProgramaVersionEdicion).filter(
-        ProgramaVersionEdicion.id_programa_version == id
-    ).count()
+    _set_ediciones_activas(pv, db)
     return pv
 
 @router.patch("/{id}", response_model=ProgramaVersionResponse)
@@ -118,7 +119,5 @@ def editar(id: int, data: ProgramaVersionUpdate, db: Session = Depends(get_db)):
 
     db.commit()
     db.refresh(pv)
-    pv.ediciones_count = db.query(ProgramaVersionEdicion).filter(
-        ProgramaVersionEdicion.id_programa_version == id
-    ).count()
+    _set_ediciones_activas(pv, db)
     return pv

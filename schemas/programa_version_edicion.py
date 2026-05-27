@@ -15,6 +15,7 @@ class ProgramaVersionEdicionBase(BaseModel):
     id_programa_version: int
     id_modalidad: int
     gestion: str | None = None
+    es_historico: bool = False
     estado: EstadoEdicionEnum = EstadoEdicionEnum.programado
     fecha_inicio: date | None = None
     fecha_fin: date | None = None
@@ -44,11 +45,19 @@ class ProgramaVersionEdicionBase(BaseModel):
         return self
 
 class ProgramaVersionEdicionCreate(ProgramaVersionEdicionBase):
-    pass
+    edicion: int | None = None
+
+    @field_validator("edicion")
+    @classmethod
+    def validar_edicion(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError("El número de edición debe ser mayor a 0")
+        return v
 
 class ProgramaVersionEdicionUpdate(BaseModel):
     id_modalidad: int | None = None
     gestion: str | None = None
+    es_historico: bool | None = None
     estado: EstadoEdicionEnum | None = None
     fecha_inicio: date | None = None
     fecha_fin: date | None = None

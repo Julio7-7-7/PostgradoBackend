@@ -7,7 +7,6 @@ class ProgramaVersionBase(BaseModel):
     descripcion: str | None = None
     foto: str | None = None
     vigente: bool = True
-    es_historico: bool = False
 
 class ProgramaVersionCreate(ProgramaVersionBase):
     pass
@@ -16,7 +15,6 @@ class ProgramaVersionUpdate(BaseModel):
     descripcion: str | None = None
     foto: str | None = None
     vigente: bool | None = None
-    es_historico: bool | None = None
 
 class ProgramaVersionResponse(ProgramaVersionBase):
     id_programa_version: int
