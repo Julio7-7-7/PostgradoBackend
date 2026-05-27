@@ -52,7 +52,7 @@ class DetalleProgramaModuloUpdate(BaseModel):
 class DetalleProgramaModuloResponse(DetalleProgramaModuloBase):
     id_detalle_programa_modulo: int
     modulo: ModuloResponse
-    docente: DocenteResponse
+    docente: DocenteResponse | None = None
     modalidad: ModalidadResponse | None = None
     created_at: datetime
     updated_at: datetime

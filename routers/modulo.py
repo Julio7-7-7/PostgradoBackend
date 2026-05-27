@@ -17,14 +17,15 @@ def crear(data: ModuloCreate, db: Session = Depends(get_db)):
     pv = db.query(ProgramaVersion).filter(
         ProgramaVersion.id_programa_version == data.id_programa_version
     ).first()
-    if pv and not pv.es_historico:
-        ediciones = db.query(ProgramaVersionEdicion).filter(
-            ProgramaVersionEdicion.id_programa_version == data.id_programa_version
+    if pv:
+        ediciones_activas = db.query(ProgramaVersionEdicion).filter(
+            ProgramaVersionEdicion.id_programa_version == data.id_programa_version,
+            ProgramaVersionEdicion.es_historico == False
         ).count()
-        if ediciones > 0:
+        if ediciones_activas > 0:
             raise HTTPException(
                 status_code=400,
-                detail="Esta versión ya cuenta con ediciones registradas. Para mantener la consistencia del programa, no es posible añadir nuevos módulos."
+                detail="Esta versión tiene ediciones no históricas registradas. No es posible añadir nuevos módulos."
             )
 
     existente = db.query(Modulo).filter(Modulo.sigla == data.sigla).first()
@@ -68,14 +69,15 @@ def editar(id: int, data: ModuloUpdate, db: Session = Depends(get_db)):
         pv = db.query(ProgramaVersion).filter(
             ProgramaVersion.id_programa_version == modulo.id_programa_version
         ).first()
-        if pv and not pv.es_historico:
-            ediciones = db.query(ProgramaVersionEdicion).filter(
-                ProgramaVersionEdicion.id_programa_version == modulo.id_programa_version
+        if pv:
+            ediciones_activas = db.query(ProgramaVersionEdicion).filter(
+                ProgramaVersionEdicion.id_programa_version == modulo.id_programa_version,
+                ProgramaVersionEdicion.es_historico == False
             ).count()
-            if ediciones > 0:
+            if ediciones_activas > 0:
                 raise HTTPException(
                     status_code=400,
-                    detail="Esta versión tiene ediciones registradas, por lo que no es posible desactivar módulos del plan de estudios."
+                    detail="Esta versión tiene ediciones no históricas, por lo que no es posible desactivar módulos del plan de estudios."
                 )
 
     if data.sigla and data.sigla != modulo.sigla:

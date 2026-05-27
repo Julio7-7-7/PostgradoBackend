@@ -138,30 +138,32 @@ def query_base(db):
         joinedload(ProgramaVersionEdicion.modalidad)
     )
 
-def es_version_historico(db: Session, id_programa_version: int) -> bool:
-    pv = db.query(ProgramaVersion).filter(
-        ProgramaVersion.id_programa_version == id_programa_version
-    ).first()
-    return pv.es_historico if pv else False
-
 @router.post("/", response_model=ProgramaVersionEdicionResponse, status_code=201)
 def crear(data: ProgramaVersionEdicionCreate, db: Session = Depends(get_db)):
-    historico = es_version_historico(db, data.id_programa_version)
     validar_cupo(data, db)
     tipo = obtener_tipo_programa(db, data.id_programa_version)
-    validar_fechas(data.fecha_inicio, data.fecha_fin, tipo, es_historico=historico)
-    validar_fecha_inicio_unica(db, data.id_programa_version, data.fecha_inicio, es_historico=historico)
+    validar_fechas(data.fecha_inicio, data.fecha_fin, tipo, es_historico=data.es_historico)
+    validar_fecha_inicio_unica(db, data.id_programa_version, data.fecha_inicio, es_historico=data.es_historico)
 
     gestion = data.gestion if data.gestion else calcular_gestion(db, data.id_programa_version)
-    validar_gestion_fecha(gestion, data.fecha_inicio, es_historico=historico)
+    validar_gestion_fecha(gestion, data.fecha_inicio, es_historico=data.es_historico)
 
-    ultima = db.query(ProgramaVersionEdicion).filter(
-        ProgramaVersionEdicion.id_programa_version == data.id_programa_version
-    ).count()
-    data_dict = data.model_dump(exclude={"gestion"})
+    data_dict = data.model_dump(exclude={"gestion", "edicion"})
+    if data.edicion:
+        num_edicion = data.edicion
+        existe = db.query(ProgramaVersionEdicion).filter(
+            ProgramaVersionEdicion.id_programa_version == data.id_programa_version,
+            ProgramaVersionEdicion.edicion == data.edicion
+        ).first()
+        if existe:
+            raise HTTPException(status_code=400, detail=f"Ya existe la edición #{data.edicion} para esta versión")
+    else:
+        num_edicion = db.query(ProgramaVersionEdicion).filter(
+            ProgramaVersionEdicion.id_programa_version == data.id_programa_version
+        ).count() + 1
     nueva = ProgramaVersionEdicion(
         **data_dict,
-        edicion=ultima + 1,
+        edicion=num_edicion,
         gestion=gestion
     )
     db.add(nueva)
@@ -187,8 +189,11 @@ def crear(data: ProgramaVersionEdicionCreate, db: Session = Depends(get_db)):
     return nueva
 
 @router.get("/", response_model=list[ProgramaVersionEdicionResponse])
-def listar(db: Session = Depends(get_db)):
-    return query_base(db).all()
+def listar(programa_version_id: int | None = None, db: Session = Depends(get_db)):
+    query = query_base(db)
+    if programa_version_id:
+        query = query.filter(ProgramaVersionEdicion.id_programa_version == programa_version_id)
+    return query.all()
 
 @router.get("/{id}", response_model=ProgramaVersionEdicionResponse)
 def obtener(id: int, db: Session = Depends(get_db)):
@@ -207,12 +212,12 @@ def editar(id: int, data: ProgramaVersionEdicionUpdate, db: Session = Depends(ge
     if not pve:
         raise HTTPException(status_code=404, detail="No encontrado")
 
-    if data.cupo_maximo:
+    if data.cupo_maximo is not None:
         validar_cupo(data, db)
 
     update_data = data.model_dump(exclude_unset=True)
     tiene_fechas = "fecha_inicio" in update_data or "fecha_fin" in update_data
-    historico = es_version_historico(db, pve.id_programa_version)
+    historico = update_data.get("es_historico", pve.es_historico)
 
     if tiene_fechas:
         tipo = obtener_tipo_programa(db, pve.id_programa_version)
