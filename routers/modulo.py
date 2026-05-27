@@ -24,7 +24,7 @@ def crear(data: ModuloCreate, db: Session = Depends(get_db)):
         if ediciones > 0:
             raise HTTPException(
                 status_code=400,
-                detail="No se pueden agregar módulos a una versión que ya tiene ediciones creadas"
+                detail="Esta versión ya cuenta con ediciones registradas. Para mantener la consistencia del programa, no es posible añadir nuevos módulos."
             )
 
     existente = db.query(Modulo).filter(Modulo.sigla == data.sigla).first()
@@ -45,8 +45,11 @@ def crear(data: ModuloCreate, db: Session = Depends(get_db)):
         )
 
 @router.get("/", response_model=list[ModuloResponse])
-def listar(db: Session = Depends(get_db)):
-    return db.query(Modulo).options(joinedload(Modulo.programa_version)).all()
+def listar(programa_version_id: int | None = None, db: Session = Depends(get_db)):
+    query = db.query(Modulo).options(joinedload(Modulo.programa_version))
+    if programa_version_id:
+        query = query.filter(Modulo.id_programa_version == programa_version_id)
+    return query.all()
 
 @router.get("/{id}", response_model=ModuloResponse)
 def obtener(id: int, db: Session = Depends(get_db)):
@@ -72,7 +75,7 @@ def editar(id: int, data: ModuloUpdate, db: Session = Depends(get_db)):
             if ediciones > 0:
                 raise HTTPException(
                     status_code=400,
-                    detail="No se pueden desactivar módulos de una versión que ya tiene ediciones creadas"
+                    detail="Esta versión tiene ediciones registradas, por lo que no es posible desactivar módulos del plan de estudios."
                 )
 
     if data.sigla and data.sigla != modulo.sigla:
