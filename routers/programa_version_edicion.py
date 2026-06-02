@@ -18,7 +18,7 @@ router = APIRouter(
 def calcular_gestion(db: Session, id_programa_version: int) -> str:
     ultima = db.query(ProgramaVersionEdicion).filter(
         ProgramaVersionEdicion.id_programa_version == id_programa_version
-    ).order_by(ProgramaVersionEdicion.created_at.desc()).first()
+    ).order_by(ProgramaVersionEdicion.edicion.desc()).first()
 
     if ultima and ultima.gestion:
         partes = ultima.gestion.split("-")
@@ -34,19 +34,21 @@ def calcular_gestion(db: Session, id_programa_version: int) -> str:
     mitad = 1 if ahora.month <= 6 else 2
     return f"{mitad}-{ahora.year}"
 
-def validar_cupo(data, db):
+def validar_cupo(id_programa_version: int, cupo_maximo: int | None, db: Session):
+    if cupo_maximo is None:
+        return
     pv = db.query(ProgramaVersion).filter(
-        ProgramaVersion.id_programa_version == data.id_programa_version
+        ProgramaVersion.id_programa_version == id_programa_version
     ).first()
     if not pv:
         raise HTTPException(status_code=404, detail="Versión de programa no encontrada")
     programa = db.query(Programa).filter(Programa.id_programa == pv.id_programa).first()
     tipo = db.query(TipoPrograma).filter(TipoPrograma.id_tipo_programa == programa.id_tipo_programa).first()
-    if tipo.cupo_minimo and data.cupo_maximo:
-        if data.cupo_maximo < tipo.cupo_minimo:
+    if tipo.cupo_minimo and cupo_maximo:
+        if cupo_maximo < tipo.cupo_minimo:
             raise HTTPException(
                 status_code=400,
-                detail=f"El cupo máximo ({data.cupo_maximo}) no puede ser menor al cupo mínimo del tipo de programa ({tipo.cupo_minimo})"
+                detail=f"El cupo máximo ({cupo_maximo}) no puede ser menor al cupo mínimo del tipo de programa ({tipo.cupo_minimo})"
             )
 
 def obtener_tipo_programa(db: Session, id_programa_version: int) -> TipoPrograma:
@@ -140,7 +142,7 @@ def query_base(db):
 
 @router.post("/", response_model=ProgramaVersionEdicionResponse, status_code=201)
 def crear(data: ProgramaVersionEdicionCreate, db: Session = Depends(get_db)):
-    validar_cupo(data, db)
+    validar_cupo(data.id_programa_version, data.cupo_maximo, db)
     tipo = obtener_tipo_programa(db, data.id_programa_version)
     validar_fechas(data.fecha_inicio, data.fecha_fin, tipo, es_historico=data.es_historico)
     validar_fecha_inicio_unica(db, data.id_programa_version, data.fecha_inicio, es_historico=data.es_historico)
@@ -189,10 +191,13 @@ def crear(data: ProgramaVersionEdicionCreate, db: Session = Depends(get_db)):
     return nueva
 
 @router.get("/", response_model=list[ProgramaVersionEdicionResponse])
-def listar(programa_version_id: int | None = None, db: Session = Depends(get_db)):
+def listar(programa_version_id: int | None = None, activas: bool | None = None, db: Session = Depends(get_db)):
     query = query_base(db)
     if programa_version_id:
         query = query.filter(ProgramaVersionEdicion.id_programa_version == programa_version_id)
+    if activas:
+        query = query.filter(ProgramaVersionEdicion.estado.in_(["programado", "en_curso"]))
+    query = query.order_by(ProgramaVersionEdicion.fecha_inicio.asc().nullslast())
     return query.all()
 
 @router.get("/{id}", response_model=ProgramaVersionEdicionResponse)
@@ -213,7 +218,7 @@ def editar(id: int, data: ProgramaVersionEdicionUpdate, db: Session = Depends(ge
         raise HTTPException(status_code=404, detail="No encontrado")
 
     if data.cupo_maximo is not None:
-        validar_cupo(data, db)
+        validar_cupo(pve.id_programa_version, data.cupo_maximo, db)
 
     update_data = data.model_dump(exclude_unset=True)
     tiene_fechas = "fecha_inicio" in update_data or "fecha_fin" in update_data
