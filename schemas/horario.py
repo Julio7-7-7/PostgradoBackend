@@ -36,10 +36,21 @@ class HorarioUpdate(BaseModel):
     hora_ini: time | None = None
     hora_fin: time | None = None
     aula: str | None = None
+    estado: str | None = None
 
 class HorarioResponse(HorarioBase):
     id_horario: int
+    estado: str
     detalle_programa_modulo: DetalleProgramaModuloResponse
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class HorarioListResponse(HorarioBase):
+    id_horario: int
+    estado: str
     created_at: datetime
     updated_at: datetime
 

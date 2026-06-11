@@ -12,6 +12,7 @@ class Horario(Base):
     hora_ini = Column(Time, nullable=False)
     hora_fin = Column(Time, nullable=False)
     aula = Column(String(200), nullable=True)
+    estado = Column(String(20), nullable=False, default="activo")
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
