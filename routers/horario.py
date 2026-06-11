@@ -1,21 +1,31 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from datetime import datetime
 from database import get_db
 from models.horario import Horario
 from models.detalle_programa_modulo import DetalleProgramaModulo
-from schemas.horario import HorarioCreate, HorarioUpdate, HorarioResponse
+from schemas.horario import HorarioCreate, HorarioUpdate, HorarioResponse, HorarioListResponse
 
 router = APIRouter(
     prefix="/horarios",
     tags=["Horarios"]
 )
 
+def query_detail(db):
+    return db.query(Horario).options(
+        joinedload(Horario.detalle_programa_modulo)
+        .joinedload(DetalleProgramaModulo.modulo),
+        joinedload(Horario.detalle_programa_modulo)
+        .joinedload(DetalleProgramaModulo.docente),
+        joinedload(Horario.detalle_programa_modulo)
+        .joinedload(DetalleProgramaModulo.modalidad),
+    )
+
 def verificar_solapamiento(db, id_detalle, dia, hora_ini, hora_fin, excluir_id=None):
-    # verificar solapamiento en el mismo módulo
     query = db.query(Horario).filter(
         Horario.id_detalle_programa_modulo == id_detalle,
         Horario.dia == dia,
+        Horario.estado != "cancelado",
         Horario.hora_ini < hora_fin,
         Horario.hora_fin > hora_ini
     )
@@ -31,12 +41,16 @@ def verificar_docente(db: Session, id_detalle: int, dia: str, hora_ini, hora_fin
     if not detalle:
         raise HTTPException(status_code=404, detail="Detalle de módulo no encontrado")
 
+    if detalle.id_docente is None:
+        return
+
     choque = db.query(Horario).join(
         DetalleProgramaModulo,
         Horario.id_detalle_programa_modulo == DetalleProgramaModulo.id_detalle_programa_modulo
     ).filter(
         DetalleProgramaModulo.id_docente == detalle.id_docente,
         DetalleProgramaModulo.estado.in_(["programado", "en_curso"]),
+        Horario.estado != "cancelado",
         Horario.dia == dia,
         Horario.hora_ini < hora_fin,
         Horario.hora_fin > hora_ini
@@ -60,22 +74,25 @@ def crear(data: HorarioCreate, db: Session = Depends(get_db)):
     db.add(nuevo)
     db.commit()
     db.refresh(nuevo)
-    return nuevo
+    return query_detail(db).filter(Horario.id_horario == nuevo.id_horario).first()
 
-@router.get("/", response_model=list[HorarioResponse])
-def listar(db: Session = Depends(get_db)):
-    return db.query(Horario).all()
+@router.get("/", response_model=list[HorarioListResponse])
+def listar(detalle_id: int | None = None, db: Session = Depends(get_db)):
+    query = db.query(Horario)
+    if detalle_id:
+        query = query.filter(Horario.id_detalle_programa_modulo == detalle_id)
+    return query.all()
 
 @router.get("/{id}", response_model=HorarioResponse)
 def obtener(id: int, db: Session = Depends(get_db)):
-    horario = db.query(Horario).filter(Horario.id_horario == id).first()
+    horario = query_detail(db).filter(Horario.id_horario == id).first()
     if not horario:
         raise HTTPException(status_code=404, detail="No encontrado")
     return horario
 
 @router.patch("/{id}", response_model=HorarioResponse)
 def editar(id: int, data: HorarioUpdate, db: Session = Depends(get_db)):
-    horario = db.query(Horario).filter(Horario.id_horario == id).first()
+    horario = query_detail(db).filter(Horario.id_horario == id).first()
     if not horario:
         raise HTTPException(status_code=404, detail="No encontrado")
     hora_ini = data.hora_ini or horario.hora_ini
@@ -87,12 +104,16 @@ def editar(id: int, data: HorarioUpdate, db: Session = Depends(get_db)):
         setattr(horario, key, value)
     db.commit()
     db.refresh(horario)
-    return horario
+    return query_detail(db).filter(Horario.id_horario == id).first()
 
-@router.delete("/{id}", status_code=204)
-def eliminar(id: int, db: Session = Depends(get_db)):
-    horario = db.query(Horario).filter(Horario.id_horario == id).first()
+@router.patch("/{id}/cancelar", response_model=HorarioResponse)
+def cancelar(id: int, db: Session = Depends(get_db)):
+    horario = query_detail(db).filter(Horario.id_horario == id).first()
     if not horario:
         raise HTTPException(status_code=404, detail="No encontrado")
-    db.delete(horario)
+    if horario.estado == "cancelado":
+        raise HTTPException(status_code=400, detail="El horario ya está cancelado")
+    horario.estado = "cancelado"
     db.commit()
+    db.refresh(horario)
+    return horario
