@@ -23,8 +23,11 @@ def crear(data: DocenteCreate, db: Session = Depends(get_db)):
     return nuevo
 
 @router.get("/", response_model=list[DocenteResponse])
-def listar(db: Session = Depends(get_db)):
-    return db.query(Docente).all()
+def listar(estado: str | None = None, db: Session = Depends(get_db)):
+    query = db.query(Docente)
+    if estado:
+        query = query.filter(Docente.estado == estado)
+    return query.all()
 
 @router.get("/{id}", response_model=DocenteResponse)
 def obtener(id: int, db: Session = Depends(get_db)):
@@ -44,10 +47,14 @@ def editar(id: int, data: DocenteUpdate, db: Session = Depends(get_db)):
     db.refresh(docente)
     return docente
 
-@router.delete("/{id}", status_code=204)
-def eliminar(id: int, db: Session = Depends(get_db)):
+@router.patch("/{id}/cancelar", response_model=DocenteResponse)
+def cancelar(id: int, db: Session = Depends(get_db)):
     docente = db.query(Docente).filter(Docente.id_docente == id).first()
     if not docente:
         raise HTTPException(status_code=404, detail="No encontrado")
-    db.delete(docente)
+    if docente.estado == "inactivo":
+        raise HTTPException(status_code=400, detail="El docente ya está inactivo")
+    docente.estado = "inactivo"
     db.commit()
+    db.refresh(docente)
+    return docente

@@ -1,6 +1,9 @@
+import re
 from pydantic import BaseModel, field_validator
 from datetime import datetime
 from enum import Enum
+
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 
 class EstadoDocenteEnum(str, Enum):
     disponible = "disponible"
@@ -41,7 +44,7 @@ class DocenteBase(BaseModel):
     @field_validator("correo")
     @classmethod
     def validar_correo(cls, v):
-        if "@" not in v:
+        if not EMAIL_REGEX.match(v.strip()):
             raise ValueError("Correo inválido")
         return v.strip().lower()
 
