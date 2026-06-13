@@ -10,6 +10,17 @@ class EstadoDocenteEnum(str, Enum):
     contratado = "contratado"
     inactivo = "inactivo"
 
+class ExtensionEnum(str, Enum):
+    lp = "LP"
+    cb = "CB"
+    sc = "SC"
+    ch = "CH"
+    oru = "OR"
+    pt = "PT"
+    trj = "TRJ"
+    bn = "BN"
+    pd = "PD"
+
 class GradoEnum(str, Enum):
     dr = "Dr."
     msc = "MSc."
@@ -22,13 +33,13 @@ class GradoEnum(str, Enum):
 class GeneroEnum(str, Enum):
     masculino = "masculino"
     femenino = "femenino"
-    otro = "otro"
 
 class DocenteBase(BaseModel):
     ci: str
     nombre: str
     apellido: str
     genero: GeneroEnum | None = None
+    extension: ExtensionEnum | None = None
     grado: GradoEnum | None = None
     titulo: str | None = None
     celular: str | None = None
@@ -38,6 +49,8 @@ class DocenteBase(BaseModel):
     @field_validator("ci")
     @classmethod
     def validar_ci(cls, v):
+        if not v.strip().isdigit():
+            raise ValueError("El CI debe contener solo números")
         if len(v.strip()) < 5:
             raise ValueError("El CI debe tener al menos 5 caracteres")
         return v.strip()
@@ -45,6 +58,9 @@ class DocenteBase(BaseModel):
     @field_validator("nombre", "apellido")
     @classmethod
     def validar_nombre(cls, v):
+        nombre_pattern = re.compile(r"^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$")
+        if not nombre_pattern.match(v.strip()):
+            raise ValueError("Debe contener solo letras")
         if len(v.strip()) < 2:
             raise ValueError("Debe tener al menos 2 caracteres")
         if len(v.strip()) > 100:
@@ -74,6 +90,7 @@ class DocenteUpdate(BaseModel):
     nombre: str | None = None
     apellido: str | None = None
     genero: GeneroEnum | None = None
+    extension: ExtensionEnum | None = None
     grado: GradoEnum | None = None
     titulo: str | None = None
     celular: str | None = None
