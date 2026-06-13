@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 from datetime import datetime
 from enum import Enum
 from schemas.modalidad_academica import ModalidadAcademicaResponse
@@ -38,5 +38,4 @@ class RequisitoResponse(RequisitoBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

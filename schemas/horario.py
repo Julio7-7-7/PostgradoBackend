@@ -1,4 +1,4 @@
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 from datetime import datetime, time
 from enum import Enum
 from schemas.detalle_programa_modulo import DetalleProgramaModuloResponse
@@ -45,8 +45,7 @@ class HorarioResponse(HorarioBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class HorarioListResponse(HorarioBase):
     id_horario: int
@@ -54,5 +53,4 @@ class HorarioListResponse(HorarioBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
