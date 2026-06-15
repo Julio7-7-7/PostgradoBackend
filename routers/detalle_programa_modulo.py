@@ -12,14 +12,13 @@ router = APIRouter(
     tags=["Detalle Programa Modulo"]
 )
 
-ESTADOS_CON_MOTIVO = {"pausado", "reprogramado"}
+ESTADOS_CON_MOTIVO = {"reprogramado"}
 MOTIVO_AUTO_EN_CURSO = "Cambiado a estado en curso por fechas"
 MOTIVO_AUTO_FINALIZADO = "Cambiado a estado finalizado por fecha de fin"
 
 ESTADO_TRANSICIONES = {
-    "programado": {"en_curso"},
-    "en_curso": {"pausado", "finalizado"},
-    "pausado": {"reprogramado", "en_curso"},
+    "programado": {"en_curso", "reprogramado"},
+    "en_curso": {"reprogramado", "finalizado"},
     "reprogramado": {"programado", "en_curso"},
     "finalizado": set(),
 }

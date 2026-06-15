@@ -8,7 +8,6 @@ from schemas.modalidad import ModalidadResponse
 class EstadoDetalleEnum(str, Enum):
     programado = "programado"
     en_curso = "en_curso"
-    pausado = "pausado"
     reprogramado = "reprogramado"
     finalizado = "finalizado"
 
