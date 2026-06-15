@@ -1,10 +1,20 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from routers import all_routers
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
+from scheduler import iniciar, detener
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    iniciar()
+    yield
+    detener()
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from datetime import datetime, date
 from enum import Enum
 from schemas.modulo import ModuloResponse
@@ -8,10 +8,8 @@ from schemas.modalidad import ModalidadResponse
 class EstadoDetalleEnum(str, Enum):
     programado = "programado"
     en_curso = "en_curso"
-    pausado = "pausado"
     reprogramado = "reprogramado"
     finalizado = "finalizado"
-    cancelado = "cancelado"
 
 class DetalleProgramaModuloBase(BaseModel):
     id_programa_version_edicion: int
@@ -49,6 +47,14 @@ class DetalleProgramaModuloUpdate(BaseModel):
     estado: EstadoDetalleEnum | None = None
     motivo: str | None = None
 
+class ReordenarItem(BaseModel):
+    id_detalle: int
+    orden: int
+
+class ReordenarRequest(BaseModel):
+    id_edicion: int
+    ordenes: list[ReordenarItem]
+
 class DetalleProgramaModuloResponse(DetalleProgramaModuloBase):
     id_detalle_programa_modulo: int
     modulo: ModuloResponse
@@ -57,5 +63,4 @@ class DetalleProgramaModuloResponse(DetalleProgramaModuloBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

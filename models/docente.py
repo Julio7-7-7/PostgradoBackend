@@ -11,6 +11,8 @@ class Docente(Base):
     nombre = Column(String(100), nullable=False)
     apellido = Column(String(100), nullable=False)
     genero = Column(String(20), nullable=True)
+    extension = Column(String(5), nullable=True)
+    grado = Column(String(50), nullable=True)
     titulo = Column(String(100), nullable=True)
     celular = Column(String(20), nullable=True)
     correo = Column(String(100), nullable=False, unique=True)
