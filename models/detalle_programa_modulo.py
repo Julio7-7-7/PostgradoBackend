@@ -1,10 +1,13 @@
-from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
 
 class DetalleProgramaModulo(Base):
     __tablename__ = "detalle_programa_modulo"
+    __table_args__ = (
+        UniqueConstraint('id_programa_version_edicion', 'orden', name='uq_detalle_orden_edicion'),
+    )
 
     id_detalle_programa_modulo = Column(Integer, primary_key=True, index=True, autoincrement=True)
     id_programa_version_edicion = Column(Integer, ForeignKey("programa_version_edicion.id_programa_version_edicion"), nullable=False)

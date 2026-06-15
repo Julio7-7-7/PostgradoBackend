@@ -47,6 +47,13 @@ class DetalleProgramaModuloUpdate(BaseModel):
     estado: EstadoDetalleEnum | None = None
     motivo: str | None = None
 
+    @model_validator(mode="after")
+    def validar_fechas(self):
+        if self.fecha_inicio and self.fecha_fin:
+            if self.fecha_fin <= self.fecha_inicio:
+                raise ValueError("La fecha fin debe ser mayor a la fecha inicio")
+        return self
+
 class ReordenarItem(BaseModel):
     id_detalle: int
     orden: int
