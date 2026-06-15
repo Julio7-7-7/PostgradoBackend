@@ -11,7 +11,6 @@ class EstadoDetalleEnum(str, Enum):
     pausado = "pausado"
     reprogramado = "reprogramado"
     finalizado = "finalizado"
-    cancelado = "cancelado"
 
 class DetalleProgramaModuloBase(BaseModel):
     id_programa_version_edicion: int

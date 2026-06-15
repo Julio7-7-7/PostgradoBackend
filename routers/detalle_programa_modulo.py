@@ -12,17 +12,16 @@ router = APIRouter(
     tags=["Detalle Programa Modulo"]
 )
 
-ESTADOS_CON_MOTIVO = {"pausado", "reprogramado", "cancelado"}
+ESTADOS_CON_MOTIVO = {"pausado", "reprogramado"}
 MOTIVO_AUTO_EN_CURSO = "Cambiado a estado en curso por fechas"
 MOTIVO_AUTO_FINALIZADO = "Cambiado a estado finalizado por fecha de fin"
 
 ESTADO_TRANSICIONES = {
-    "programado": {"en_curso", "cancelado"},
-    "en_curso": {"pausado", "finalizado", "cancelado"},
-    "pausado": {"reprogramado", "en_curso", "cancelado"},
-    "reprogramado": {"programado", "en_curso", "cancelado"},
-    "finalizado": {"cancelado"},
-    "cancelado": set(),
+    "programado": {"en_curso"},
+    "en_curso": {"pausado", "finalizado"},
+    "pausado": {"reprogramado", "en_curso"},
+    "reprogramado": {"programado", "en_curso"},
+    "finalizado": set(),
 }
 
 def validar_transicion(estado_actual: str, estado_nuevo: str):
@@ -170,37 +169,4 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
     detalle = query_base(db).filter(
         DetalleProgramaModulo.id_detalle_programa_modulo == id
     ).first()
-    return detalle
-
-@router.patch("/{id}/cancelar", status_code=200)
-def cancelar(id: int, db: Session = Depends(get_db)):
-    detalle = db.query(DetalleProgramaModulo).options(
-        joinedload(DetalleProgramaModulo.modulo),
-        joinedload(DetalleProgramaModulo.docente),
-        joinedload(DetalleProgramaModulo.modalidad),
-        joinedload(DetalleProgramaModulo.horarios),
-    ).filter(
-        DetalleProgramaModulo.id_detalle_programa_modulo == id
-    ).first()
-    if not detalle:
-        raise HTTPException(status_code=404, detail="No encontrado")
-    validar_transicion(detalle.estado, "cancelado")
-
-    historial = HistorialModulo(
-        id_detalle_programa_modulo=id,
-        estado_anterior=detalle.estado,
-        estado_nuevo="cancelado",
-        motivo="Cancelación manual",
-        fecha_inicio_original=detalle.fecha_inicio,
-        fecha_fin_original=detalle.fecha_fin
-    )
-    db.add(historial)
-    detalle.estado = "cancelado"
-
-    for h in detalle.horarios:
-        if h.estado != "cancelado":
-            h.estado = "cancelado"
-
-    db.commit()
-    db.refresh(detalle)
     return detalle
