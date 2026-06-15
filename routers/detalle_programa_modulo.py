@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
@@ -11,6 +13,7 @@ router = APIRouter(
 )
 
 ESTADOS_CON_MOTIVO = {"pausado", "reprogramado", "cancelado"}
+MOTIVO_AUTO_EN_CURSO = "Cambiado a estado en curso por fechas"
 
 def query_base(db):
     return db.query(DetalleProgramaModulo).options(
@@ -18,6 +21,24 @@ def query_base(db):
         joinedload(DetalleProgramaModulo.docente),
         joinedload(DetalleProgramaModulo.modalidad),
     )
+
+def actualizar_estado_auto(detalle: DetalleProgramaModulo, db: Session) -> bool:
+    if detalle.estado != "programado" or not detalle.fecha_inicio:
+        return False
+    if detalle.fecha_inicio > date.today():
+        return False
+    detalle.estado = "en_curso"
+    historial = HistorialModulo(
+        id_detalle_programa_modulo=detalle.id_detalle_programa_modulo,
+        estado_anterior="programado",
+        estado_nuevo="en_curso",
+        motivo=MOTIVO_AUTO_EN_CURSO,
+        fecha_inicio_original=detalle.fecha_inicio,
+        fecha_fin_original=detalle.fecha_fin,
+    )
+    db.add(historial)
+    db.commit()
+    return True
 
 @router.post("/", response_model=DetalleProgramaModuloResponse, status_code=201)
 def crear(data: DetalleProgramaModuloCreate, db: Session = Depends(get_db)):
@@ -38,7 +59,14 @@ def listar(edicion_id: int | None = None, db: Session = Depends(get_db)):
     query = query_base(db)
     if edicion_id:
         query = query.filter(DetalleProgramaModulo.id_programa_version_edicion == edicion_id)
-    return query.all()
+    resultados = query.all()
+    cambios = False
+    for d in resultados:
+        if actualizar_estado_auto(d, db):
+            cambios = True
+    if cambios:
+        resultados = query.all()
+    return resultados
 
 @router.get("/{id}", response_model=DetalleProgramaModuloResponse)
 def obtener(id: int, db: Session = Depends(get_db)):
@@ -47,6 +75,10 @@ def obtener(id: int, db: Session = Depends(get_db)):
     ).first()
     if not detalle:
         raise HTTPException(status_code=404, detail="No encontrado")
+    if actualizar_estado_auto(detalle, db):
+        detalle = query_base(db).filter(
+            DetalleProgramaModulo.id_detalle_programa_modulo == id
+        ).first()
     return detalle
 
 @router.patch("/{id}", response_model=DetalleProgramaModuloResponse)
