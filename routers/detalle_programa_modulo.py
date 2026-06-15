@@ -14,6 +14,27 @@ router = APIRouter(
 
 ESTADOS_CON_MOTIVO = {"pausado", "reprogramado", "cancelado"}
 MOTIVO_AUTO_EN_CURSO = "Cambiado a estado en curso por fechas"
+MOTIVO_AUTO_FINALIZADO = "Cambiado a estado finalizado por fecha de fin"
+
+ESTADO_TRANSICIONES = {
+    "programado": {"en_curso", "cancelado"},
+    "en_curso": {"pausado", "finalizado", "cancelado"},
+    "pausado": {"reprogramado", "en_curso", "cancelado"},
+    "reprogramado": {"programado", "en_curso", "cancelado"},
+    "finalizado": {"cancelado"},
+    "cancelado": set(),
+}
+
+def validar_transicion(estado_actual: str, estado_nuevo: str):
+    permitidos = ESTADO_TRANSICIONES.get(estado_actual, set())
+    if estado_nuevo not in permitidos:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"No se puede cambiar de '{estado_actual}' a '{estado_nuevo}'. "
+                f"Transiciones permitidas: {', '.join(sorted(permitidos)) if permitidos else 'ninguna'}"
+            )
+        )
 
 def query_base(db):
     return db.query(DetalleProgramaModulo).options(
@@ -23,22 +44,37 @@ def query_base(db):
     )
 
 def actualizar_estado_auto(detalle: DetalleProgramaModulo, db: Session) -> bool:
-    if detalle.estado != "programado" or not detalle.fecha_inicio:
-        return False
-    if detalle.fecha_inicio > date.today():
-        return False
-    detalle.estado = "en_curso"
-    historial = HistorialModulo(
-        id_detalle_programa_modulo=detalle.id_detalle_programa_modulo,
-        estado_anterior="programado",
-        estado_nuevo="en_curso",
-        motivo=MOTIVO_AUTO_EN_CURSO,
-        fecha_inicio_original=detalle.fecha_inicio,
-        fecha_fin_original=detalle.fecha_fin,
-    )
-    db.add(historial)
-    db.commit()
-    return True
+    hoy = date.today()
+
+    if detalle.estado == "programado" and detalle.fecha_inicio and detalle.fecha_inicio <= hoy:
+        detalle.estado = "en_curso"
+        historial = HistorialModulo(
+            id_detalle_programa_modulo=detalle.id_detalle_programa_modulo,
+            estado_anterior="programado",
+            estado_nuevo="en_curso",
+            motivo=MOTIVO_AUTO_EN_CURSO,
+            fecha_inicio_original=detalle.fecha_inicio,
+            fecha_fin_original=detalle.fecha_fin,
+        )
+        db.add(historial)
+        db.commit()
+        return True
+
+    if detalle.estado == "en_curso" and detalle.fecha_fin and detalle.fecha_fin < hoy:
+        detalle.estado = "finalizado"
+        historial = HistorialModulo(
+            id_detalle_programa_modulo=detalle.id_detalle_programa_modulo,
+            estado_anterior="en_curso",
+            estado_nuevo="finalizado",
+            motivo=MOTIVO_AUTO_FINALIZADO,
+            fecha_inicio_original=detalle.fecha_inicio,
+            fecha_fin_original=detalle.fecha_fin,
+        )
+        db.add(historial)
+        db.commit()
+        return True
+
+    return False
 
 @router.post("/", response_model=DetalleProgramaModuloResponse, status_code=201)
 def crear(data: DetalleProgramaModuloCreate, db: Session = Depends(get_db)):
@@ -89,18 +125,29 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
     if not detalle:
         raise HTTPException(status_code=404, detail="No encontrado")
 
-    # si cambia estado a uno que requiere motivo
-    if data.estado and data.estado in ESTADOS_CON_MOTIVO:
-        if not data.motivo:
-            raise HTTPException(
-                status_code=400,
-                detail=f"El campo motivo es obligatorio cuando el estado es {data.estado}"
-            )
+    actualizar_estado_auto(detalle, db)
+
+    # validar transición de estado
+    if data.estado:
+        validar_transicion(detalle.estado, data.estado)
+
+        if data.estado in ESTADOS_CON_MOTIVO:
+            if not data.motivo:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"El campo motivo es obligatorio cuando el estado es {data.estado}"
+                )
+            if len(data.motivo.strip()) < 5:
+                raise HTTPException(
+                    status_code=400,
+                    detail="El motivo debe tener al menos 5 caracteres"
+                )
+
         historial = HistorialModulo(
             id_detalle_programa_modulo=id,
             estado_anterior=detalle.estado,
             estado_nuevo=data.estado,
-            motivo=data.motivo,
+            motivo=data.motivo if data.estado in ESTADOS_CON_MOTIVO else f"Cambio manual de '{detalle.estado}' a '{data.estado}'",
             fecha_inicio_original=detalle.fecha_inicio,
             fecha_fin_original=detalle.fecha_fin
         )
@@ -127,13 +174,18 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
 
 @router.patch("/{id}/cancelar", status_code=200)
 def cancelar(id: int, db: Session = Depends(get_db)):
-    detalle = query_base(db).filter(
+    detalle = db.query(DetalleProgramaModulo).options(
+        joinedload(DetalleProgramaModulo.modulo),
+        joinedload(DetalleProgramaModulo.docente),
+        joinedload(DetalleProgramaModulo.modalidad),
+        joinedload(DetalleProgramaModulo.horarios),
+    ).filter(
         DetalleProgramaModulo.id_detalle_programa_modulo == id
     ).first()
     if not detalle:
         raise HTTPException(status_code=404, detail="No encontrado")
-    if detalle.estado == "cancelado":
-        raise HTTPException(status_code=400, detail="El módulo ya está cancelado")
+    validar_transicion(detalle.estado, "cancelado")
+
     historial = HistorialModulo(
         id_detalle_programa_modulo=id,
         estado_anterior=detalle.estado,
@@ -144,6 +196,11 @@ def cancelar(id: int, db: Session = Depends(get_db)):
     )
     db.add(historial)
     detalle.estado = "cancelado"
+
+    for h in detalle.horarios:
+        if h.estado != "cancelado":
+            h.estado = "cancelado"
+
     db.commit()
     db.refresh(detalle)
     return detalle
