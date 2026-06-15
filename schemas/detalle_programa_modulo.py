@@ -47,6 +47,14 @@ class DetalleProgramaModuloUpdate(BaseModel):
     estado: EstadoDetalleEnum | None = None
     motivo: str | None = None
 
+class ReordenarItem(BaseModel):
+    id_detalle: int
+    orden: int
+
+class ReordenarRequest(BaseModel):
+    id_edicion: int
+    ordenes: list[ReordenarItem]
+
 class DetalleProgramaModuloResponse(DetalleProgramaModuloBase):
     id_detalle_programa_modulo: int
     modulo: ModuloResponse

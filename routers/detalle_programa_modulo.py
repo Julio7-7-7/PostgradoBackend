@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from models.detalle_programa_modulo import DetalleProgramaModulo
 from models.historial_modulo import HistorialModulo
-from schemas.detalle_programa_modulo import DetalleProgramaModuloCreate, DetalleProgramaModuloUpdate, DetalleProgramaModuloResponse
+from schemas.detalle_programa_modulo import DetalleProgramaModuloCreate, DetalleProgramaModuloUpdate, DetalleProgramaModuloResponse, ReordenarRequest
 
 router = APIRouter(
     prefix="/detalle-programa-modulo",
@@ -87,6 +87,43 @@ def crear(data: DetalleProgramaModuloCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(nuevo)
     return nuevo
+
+@router.post("/reordenar", status_code=200)
+def reordenar(data: ReordenarRequest, db: Session = Depends(get_db)):
+    ids_recibidos = {item.id_detalle for item in data.ordenes}
+    ordenes_recibidos = [item.orden for item in data.ordenes]
+    esperados = set(range(1, len(data.ordenes) + 1))
+
+    if set(ordenes_recibidos) != esperados:
+        raise HTTPException(status_code=400, detail="Los órdenes deben ser 1..N sin repetir")
+
+    existentes = db.query(DetalleProgramaModulo).filter(
+        DetalleProgramaModulo.id_programa_version_edicion == data.id_edicion
+    ).all()
+
+    ids_reales = {d.id_detalle_programa_modulo for d in existentes}
+    if ids_recibidos != ids_reales:
+        raise HTTPException(status_code=400, detail="Los módulos enviados no coinciden con los de la edición")
+
+    for d in existentes:
+        if d.estado == "finalizado":
+            raise HTTPException(status_code=400, detail="No se puede reordenar: hay módulos finalizados en la edición")
+
+    for item in data.ordenes:
+        db.query(DetalleProgramaModulo).filter(
+            DetalleProgramaModulo.id_detalle_programa_modulo == item.id_detalle
+        ).update({"orden": -item.orden})
+
+    db.flush()
+
+    for item in data.ordenes:
+        db.query(DetalleProgramaModulo).filter(
+            DetalleProgramaModulo.id_detalle_programa_modulo == item.id_detalle
+        ).update({"orden": item.orden})
+
+    db.commit()
+    return {"mensaje": "Orden actualizado correctamente"}
+
 
 @router.get("/", response_model=list[DetalleProgramaModuloResponse])
 def listar(edicion_id: int | None = None, db: Session = Depends(get_db)):
