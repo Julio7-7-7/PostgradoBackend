@@ -1,8 +1,6 @@
 from datetime import date
 from apscheduler.schedulers.background import BackgroundScheduler
 from database import SessionLocal
-from models.detalle_programa_modulo import DetalleProgramaModulo
-from models.historial_modulo import HistorialModulo
 
 MOTIVO_AUTO_EN_CURSO = "Cambiado a estado en curso por fechas"
 MOTIVO_AUTO_FINALIZADO = "Cambiado a estado finalizado por fecha de fin"
