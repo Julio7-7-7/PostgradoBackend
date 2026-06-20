@@ -16,7 +16,7 @@ class Docente(Base):
     titulo = Column(String(100), nullable=True)
     celular = Column(String(20), nullable=True)
     correo = Column(String(100), nullable=False, unique=True)
-    estado = Column(String(20), nullable=False, default="disponible")
+    estado = Column(String(20), nullable=False, default="activo")
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
