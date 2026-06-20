@@ -1,6 +1,6 @@
-
 from datetime import datetime, date
 from enum import Enum
+from pydantic import BaseModel, ConfigDict, field_validator
 from schemas.alumno import AlumnoResponse
 from schemas.modalidad_academica import ModalidadAcademicaResponse
 

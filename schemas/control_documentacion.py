@@ -1,6 +1,6 @@
-
 from datetime import datetime, date
 from enum import Enum
+from pydantic import BaseModel, ConfigDict
 from schemas.requisito import RequisitoResponse
 
 class EstadoControlEnum(str, Enum):
