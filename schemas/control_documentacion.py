@@ -1,4 +1,4 @@
-
+from pydantic import BaseModel, ConfigDict, field_validator
 from datetime import datetime, date
 from enum import Enum
 from schemas.requisito import RequisitoResponse
