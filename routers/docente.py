@@ -101,7 +101,7 @@ def cancelar(id: int, db: Session = Depends(get_db)):
     if modulos_activos:
         raise HTTPException(
             status_code=400,
-            detail="No se puede dar de baja al docente porque tiene módulos activos asignados (no finalizados)"
+            detail="No se puede dar de baja al docente porque tiene módulos activos asignados (no estan finalizados)"
         )
     docente.estado = "inactivo"
     db.commit()
