@@ -142,10 +142,12 @@ def reordenar(data: ReordenarRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/", response_model=list[DetalleProgramaModuloResponse])
-def listar(edicion_id: int | None = None, db: Session = Depends(get_db)):
+def listar(edicion_id: int | None = None, id_docente: int | None = None, db: Session = Depends(get_db)):
     query = query_base(db)
     if edicion_id:
         query = query.filter(DetalleProgramaModulo.id_programa_version_edicion == edicion_id)
+    if id_docente:
+        query = query.filter(DetalleProgramaModulo.id_docente == id_docente)
     resultados = query.all()
     cambios = False
     for d in resultados:

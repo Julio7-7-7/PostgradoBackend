@@ -6,8 +6,7 @@ from enum import Enum
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 
 class EstadoDocenteEnum(str, Enum):
-    disponible = "disponible"
-    contratado = "contratado"
+    activo = "activo"
     inactivo = "inactivo"
 
 class ExtensionEnum(str, Enum):
@@ -44,7 +43,7 @@ class DocenteBase(BaseModel):
     titulo: str | None = None
     celular: str | None = None
     correo: str
-    estado: EstadoDocenteEnum = EstadoDocenteEnum.disponible
+    estado: EstadoDocenteEnum = EstadoDocenteEnum.activo
 
     @field_validator("ci")
     @classmethod
@@ -99,6 +98,7 @@ class DocenteUpdate(BaseModel):
 
 class DocenteResponse(DocenteBase):
     id_docente: int
+    tiene_modulos_activos: bool = False
     created_at: datetime
     updated_at: datetime
 
