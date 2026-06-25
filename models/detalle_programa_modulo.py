@@ -27,3 +27,11 @@ class DetalleProgramaModulo(Base):
     modalidad = relationship("Modalidad", back_populates="detalles_modulo")
     historial = relationship("HistorialModulo", back_populates="detalle_programa_modulo")
     horarios = relationship("Horario", back_populates="detalle_programa_modulo")
+
+    @property
+    def id_programa_version(self) -> int:
+        return self.programa_version_edicion.id_programa_version
+
+    @property
+    def id_programa(self) -> int:
+        return self.programa_version_edicion.programa_version.id_programa
