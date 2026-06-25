@@ -43,6 +43,7 @@ def query_base(db):
         joinedload(DetalleProgramaModulo.modulo),
         joinedload(DetalleProgramaModulo.docente),
         joinedload(DetalleProgramaModulo.modalidad),
+        joinedload(DetalleProgramaModulo.programa_version_edicion).joinedload(ProgramaVersionEdicion.programa_version),
     )
 
 def actualizar_estado_auto(detalle: DetalleProgramaModulo, db: Session) -> bool:
