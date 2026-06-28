@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from database import get_db
 from models.docente import Docente
-from models.detalle_programa_modulo import DetalleProgramaModulo
+from models.contratacion_docente import ContratacionDocente
 from schemas.docente import DocenteCreate, DocenteUpdate, DocenteResponse
 
 router = APIRouter(
@@ -26,10 +26,9 @@ def crear(data: DocenteCreate, db: Session = Depends(get_db)):
     resp.tiene_modulos_activos = False
     return resp
 
-def _ids_con_modulos(db: Session) -> set[int]:
-    filas = db.query(DetalleProgramaModulo.id_docente).filter(
-        DetalleProgramaModulo.estado != "finalizado",
-        DetalleProgramaModulo.id_docente.isnot(None),
+def _ids_con_contratos(db: Session) -> set[int]:
+    filas = db.query(ContratacionDocente.id_docente).filter(
+        ContratacionDocente.estado != "truncado",
     ).distinct().all()
     return {r[0] for r in filas}
 
@@ -39,11 +38,11 @@ def listar(estado: str | None = None, db: Session = Depends(get_db)):
     if estado:
         query = query.filter(Docente.estado == estado)
     docentes = query.all()
-    ids_con_modulos = _ids_con_modulos(db)
+    ids_con_contratos = _ids_con_contratos(db)
     respuestas = []
     for d in docentes:
         r = DocenteResponse.model_validate(d)
-        r.tiene_modulos_activos = d.id_docente in ids_con_modulos
+        r.tiene_modulos_activos = d.id_docente in ids_con_contratos
         respuestas.append(r)
     return respuestas
 
@@ -53,9 +52,9 @@ def obtener(id: int, db: Session = Depends(get_db)):
     if not docente:
         raise HTTPException(status_code=404, detail="No encontrado")
     resp = DocenteResponse.model_validate(docente)
-    resp.tiene_modulos_activos = db.query(DetalleProgramaModulo).filter(
-        DetalleProgramaModulo.id_docente == id,
-        DetalleProgramaModulo.estado != "finalizado",
+    resp.tiene_modulos_activos = db.query(ContratacionDocente).filter(
+        ContratacionDocente.id_docente == id,
+        ContratacionDocente.estado != "truncado",
     ).first() is not None
     return resp
 
@@ -81,9 +80,9 @@ def editar(id: int, data: DocenteUpdate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(docente)
     resp = DocenteResponse.model_validate(docente)
-    resp.tiene_modulos_activos = db.query(DetalleProgramaModulo).filter(
-        DetalleProgramaModulo.id_docente == id,
-        DetalleProgramaModulo.estado != "finalizado",
+    resp.tiene_modulos_activos = db.query(ContratacionDocente).filter(
+        ContratacionDocente.id_docente == id,
+        ContratacionDocente.estado != "truncado",
     ).first() is not None
     return resp
 
@@ -94,14 +93,14 @@ def cancelar(id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="No encontrado")
     if docente.estado == "inactivo":
         raise HTTPException(status_code=400, detail="El docente ya está inactivo")
-    modulos_activos = db.query(DetalleProgramaModulo).filter(
-        DetalleProgramaModulo.id_docente == id,
-        DetalleProgramaModulo.estado != "finalizado"
+    contratos_activos = db.query(ContratacionDocente).filter(
+        ContratacionDocente.id_docente == id,
+        ContratacionDocente.estado != "truncado",
     ).first()
-    if modulos_activos:
+    if contratos_activos:
         raise HTTPException(
             status_code=400,
-            detail="No se puede dar de baja al docente porque tiene módulos activos asignados (no estan finalizados)"
+            detail="No se puede dar de baja al docente porque tiene contrataciones activas"
         )
     docente.estado = "inactivo"
     db.commit()

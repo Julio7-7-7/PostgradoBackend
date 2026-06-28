@@ -12,7 +12,6 @@ class DetalleProgramaModulo(Base):
     id_detalle_programa_modulo = Column(Integer, primary_key=True, index=True, autoincrement=True)
     id_programa_version_edicion = Column(Integer, ForeignKey("programa_version_edicion.id_programa_version_edicion"), nullable=False)
     id_modulo = Column(Integer, ForeignKey("modulos.id_modulo"), nullable=False)
-    id_docente = Column(Integer, ForeignKey("docentes.id_docente"), nullable=True)
     id_modalidad = Column(Integer, ForeignKey("modalidades.id_modalidad"), nullable=True)
     orden = Column(Integer, nullable=False)
     fecha_inicio = Column(Date, nullable=True)
@@ -23,8 +22,8 @@ class DetalleProgramaModulo(Base):
 
     programa_version_edicion = relationship("ProgramaVersionEdicion", back_populates="detalles_modulo")
     modulo = relationship("Modulo", back_populates="detalles")
-    docente = relationship("Docente", back_populates="detalles")
     modalidad = relationship("Modalidad", back_populates="detalles_modulo")
+    contrataciones = relationship("ContratacionDocente", back_populates="detalle_modulo")
     historial = relationship("HistorialModulo", back_populates="detalle_programa_modulo")
     horarios = relationship("Horario", back_populates="detalle_programa_modulo")
 
@@ -35,3 +34,15 @@ class DetalleProgramaModulo(Base):
     @property
     def id_programa(self) -> int:
         return self.programa_version_edicion.programa_version.id_programa
+
+    @property
+    def edicion(self) -> int:
+        return self.programa_version_edicion.edicion
+
+    @property
+    def programa_nombre(self) -> str:
+        return self.programa_version_edicion.programa_version.programa.nombre_programa
+
+    @property
+    def programa_version_numero(self) -> int:
+        return self.programa_version_edicion.programa_version.version

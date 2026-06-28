@@ -4,6 +4,7 @@ from enum import Enum
 from schemas.modulo import ModuloResponse
 from schemas.docente import DocenteResponse
 from schemas.modalidad import ModalidadResponse
+from schemas.contrataciones_docente import ContratacionDocenteResponse
 
 class EstadoDetalleEnum(str, Enum):
     programado = "programado"
@@ -14,7 +15,6 @@ class EstadoDetalleEnum(str, Enum):
 class DetalleProgramaModuloBase(BaseModel):
     id_programa_version_edicion: int
     id_modulo: int
-    id_docente: int | None = None
     id_modalidad: int | None = None
     orden: int
     fecha_inicio: date | None = None
@@ -39,7 +39,6 @@ class DetalleProgramaModuloCreate(DetalleProgramaModuloBase):
     pass
 
 class DetalleProgramaModuloUpdate(BaseModel):
-    id_docente: int | None = None
     id_modalidad: int | None = None
     orden: int | None = None
     fecha_inicio: date | None = None
@@ -66,9 +65,13 @@ class DetalleProgramaModuloResponse(DetalleProgramaModuloBase):
     id_detalle_programa_modulo: int
     id_programa_version: int
     id_programa: int
+    edicion: int
+    programa_nombre: str
+    programa_version_numero: int
     modulo: ModuloResponse
     docente: DocenteResponse | None = None
     modalidad: ModalidadResponse | None = None
+    contratacion: ContratacionDocenteResponse | None = None
     created_at: datetime
     updated_at: datetime
 

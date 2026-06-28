@@ -30,3 +30,25 @@ def eliminar_foto(ruta: str | None):
         archivo = Path(__file__).parent.parent / ruta.lstrip("/")
         if archivo.exists():
             archivo.unlink()
+
+FORMATOS_PDF = {"pdf"}
+
+def guardar_pdf_base64(data_url: str, media_subdir: str = "contratos") -> str:
+    try:
+        header, encoded = data_url.split(",", 1)
+        extension = header.split(";")[0].split("/")[1]
+        if extension not in FORMATOS_PDF:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Formato no soportado: {extension}. Solo se acepta PDF.",
+            )
+        binary_data = base64.b64decode(encoded)
+        filename = f"{uuid.uuid4()}.{extension}"
+        MEDIA_DIR = Path(__file__).parent.parent / "media" / media_subdir
+        MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+        filepath = MEDIA_DIR / filename
+        with open(filepath, "wb") as f:
+            f.write(binary_data)
+        return f"/media/{media_subdir}/{filename}"
+    except (ValueError, IndexError, base64.binascii.Error):
+        raise HTTPException(status_code=400, detail="El archivo no tiene un formato base64 válido")
