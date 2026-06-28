@@ -1,15 +1,17 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from models.detalle_programa_modulo import DetalleProgramaModulo
 from models.historial_modulo import HistorialModulo
-from models.docente import Docente
+from models.contratacion_docente import ContratacionDocente
 from models.modalidad import Modalidad
 from models.modulo import Modulo
 from models.programa_version_edicion import ProgramaVersionEdicion
 from schemas.detalle_programa_modulo import DetalleProgramaModuloCreate, DetalleProgramaModuloUpdate, DetalleProgramaModuloResponse, ReordenarRequest
+from schemas.contrataciones_docente import ContratacionDocenteResponse
 
 router = APIRouter(
     prefix="/detalle-programa-modulo",
@@ -41,10 +43,21 @@ def validar_transicion(estado_actual: str, estado_nuevo: str):
 def query_base(db):
     return db.query(DetalleProgramaModulo).options(
         joinedload(DetalleProgramaModulo.modulo),
-        joinedload(DetalleProgramaModulo.docente),
         joinedload(DetalleProgramaModulo.modalidad),
+        joinedload(DetalleProgramaModulo.contrataciones).joinedload(ContratacionDocente.docente),
         joinedload(DetalleProgramaModulo.programa_version_edicion).joinedload(ProgramaVersionEdicion.programa_version),
     )
+
+def poblar_docente_y_contratacion(detalles: list[DetalleProgramaModulo] | DetalleProgramaModulo):
+    lista = detalles if isinstance(detalles, list) else [detalles]
+    for d in lista:
+        d.docente = None
+        d.contratacion = None
+        for c in d.contrataciones:
+            if c.estado != "truncado":
+                d.docente = c.docente
+                d.contratacion = c
+                break
 
 def actualizar_estado_auto(detalle: DetalleProgramaModulo, db: Session) -> bool:
     hoy = date.today()
@@ -85,8 +98,6 @@ def crear(data: DetalleProgramaModuloCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="La edición especificada no existe")
     if not db.query(Modulo).filter(Modulo.id_modulo == data.id_modulo).first():
         raise HTTPException(status_code=400, detail="El módulo especificado no existe")
-    if data.id_docente is not None and not db.query(Docente).filter(Docente.id_docente == data.id_docente).first():
-        raise HTTPException(status_code=400, detail="El docente especificado no existe")
     if data.id_modalidad is not None and not db.query(Modalidad).filter(Modalidad.id_modalidad == data.id_modalidad).first():
         raise HTTPException(status_code=400, detail="La modalidad especificada no existe")
     orden_existente = db.query(DetalleProgramaModulo).filter(
@@ -101,7 +112,11 @@ def crear(data: DetalleProgramaModuloCreate, db: Session = Depends(get_db)):
     actualizar_estado_auto(nuevo, db)
     db.commit()
     db.refresh(nuevo)
-    return nuevo
+    detalle = query_base(db).filter(
+        DetalleProgramaModulo.id_detalle_programa_modulo == nuevo.id_detalle_programa_modulo
+    ).first()
+    poblar_docente_y_contratacion(detalle)
+    return detalle
 
 @router.post("/reordenar", status_code=200)
 def reordenar(data: ReordenarRequest, db: Session = Depends(get_db)):
@@ -148,7 +163,11 @@ def listar(edicion_id: int | None = None, id_docente: int | None = None, db: Ses
     if edicion_id:
         query = query.filter(DetalleProgramaModulo.id_programa_version_edicion == edicion_id)
     if id_docente:
-        query = query.filter(DetalleProgramaModulo.id_docente == id_docente)
+        subq = select(ContratacionDocente.id_detalle_modulo).where(
+            ContratacionDocente.id_docente == id_docente,
+            ContratacionDocente.estado != "truncado",
+        )
+        query = query.filter(DetalleProgramaModulo.id_detalle_programa_modulo.in_(subq))
     resultados = query.all()
     cambios = False
     for d in resultados:
@@ -157,6 +176,7 @@ def listar(edicion_id: int | None = None, id_docente: int | None = None, db: Ses
     if cambios:
         db.commit()
         resultados = query.all()
+    poblar_docente_y_contratacion(resultados)
     return resultados
 
 @router.get("/{id}", response_model=DetalleProgramaModuloResponse)
@@ -171,6 +191,7 @@ def obtener(id: int, db: Session = Depends(get_db)):
         detalle = query_base(db).filter(
             DetalleProgramaModulo.id_detalle_programa_modulo == id
         ).first()
+    poblar_docente_y_contratacion(detalle)
     return detalle
 
 @router.patch("/{id}", response_model=DetalleProgramaModuloResponse)
@@ -183,15 +204,10 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
 
     actualizar_estado_auto(detalle, db)
 
-    # validar FK
-    if data.id_docente is not None:
-        if not db.query(Docente).filter(Docente.id_docente == data.id_docente).first():
-            raise HTTPException(status_code=400, detail=f"Docente con id {data.id_docente} no encontrado")
     if data.id_modalidad is not None:
         if not db.query(Modalidad).filter(Modalidad.id_modalidad == data.id_modalidad).first():
             raise HTTPException(status_code=400, detail=f"Modalidad con id {data.id_modalidad} no encontrado")
 
-    # validar transición de estado
     if data.estado:
         validar_transicion(detalle.estado, data.estado)
 
@@ -218,7 +234,6 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
         )
         db.add(historial)
 
-    # validar orden si se cambia
     if data.orden is not None:
         orden_existente = db.query(DetalleProgramaModulo).filter(
             DetalleProgramaModulo.id_programa_version_edicion == detalle.id_programa_version_edicion,
@@ -235,4 +250,5 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
     detalle = query_base(db).filter(
         DetalleProgramaModulo.id_detalle_programa_modulo == id
     ).first()
+    poblar_docente_y_contratacion(detalle)
     return detalle

@@ -4,6 +4,7 @@ from datetime import datetime
 from database import get_db
 from models.horario import Horario
 from models.detalle_programa_modulo import DetalleProgramaModulo
+from models.contratacion_docente import ContratacionDocente
 from schemas.horario import HorarioCreate, HorarioUpdate, HorarioResponse, HorarioListResponse
 
 router = APIRouter(
@@ -16,9 +17,10 @@ def query_detail(db):
         joinedload(Horario.detalle_programa_modulo)
         .joinedload(DetalleProgramaModulo.modulo),
         joinedload(Horario.detalle_programa_modulo)
-        .joinedload(DetalleProgramaModulo.docente),
-        joinedload(Horario.detalle_programa_modulo)
         .joinedload(DetalleProgramaModulo.modalidad),
+        joinedload(Horario.detalle_programa_modulo)
+        .joinedload(DetalleProgramaModulo.contrataciones)
+        .joinedload(ContratacionDocente.docente),
     )
 
 def verificar_solapamiento(db, id_detalle, dia, hora_ini, hora_fin, excluir_id=None):
@@ -35,20 +37,24 @@ def verificar_solapamiento(db, id_detalle, dia, hora_ini, hora_fin, excluir_id=N
         raise HTTPException(status_code=400, detail="El horario se solapa con otro horario existente en este módulo")
 
 def verificar_docente(db: Session, id_detalle: int, dia: str, hora_ini, hora_fin, excluir_id: int = None):
-    detalle = db.query(DetalleProgramaModulo).filter(
-        DetalleProgramaModulo.id_detalle_programa_modulo == id_detalle
+    contratacion = db.query(ContratacionDocente).filter(
+        ContratacionDocente.id_detalle_modulo == id_detalle,
+        ContratacionDocente.estado != "truncado",
     ).first()
-    if not detalle:
-        raise HTTPException(status_code=404, detail="Detalle de módulo no encontrado")
-
-    if detalle.id_docente is None:
+    if not contratacion:
         return
+
+    id_docente = contratacion.id_docente
 
     choque = db.query(Horario).join(
         DetalleProgramaModulo,
-        Horario.id_detalle_programa_modulo == DetalleProgramaModulo.id_detalle_programa_modulo
+        Horario.id_detalle_programa_modulo == DetalleProgramaModulo.id_detalle_programa_modulo,
+    ).join(
+        ContratacionDocente,
+        ContratacionDocente.id_detalle_modulo == DetalleProgramaModulo.id_detalle_programa_modulo,
     ).filter(
-        DetalleProgramaModulo.id_docente == detalle.id_docente,
+        ContratacionDocente.id_docente == id_docente,
+        ContratacionDocente.estado != "truncado",
         DetalleProgramaModulo.estado.in_(["programado", "en_curso"]),
         Horario.estado != "cancelado",
         Horario.dia == dia,

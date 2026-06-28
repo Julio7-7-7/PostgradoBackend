@@ -20,4 +20,4 @@ class Docente(Base):
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    detalles = relationship("DetalleProgramaModulo", back_populates="docente")
+    contrataciones = relationship("ContratacionDocente", back_populates="docente")
