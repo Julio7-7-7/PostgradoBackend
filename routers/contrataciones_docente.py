@@ -43,6 +43,12 @@ def crear(data: ContratacionDocenteCreate, db: Session = Depends(get_db)):
         )
 
     nuevo = ContratacionDocente(**data.model_dump())
+    detalle = db.query(DetalleProgramaModulo).filter(
+        DetalleProgramaModulo.id_detalle_programa_modulo == data.id_detalle_modulo
+    ).first()
+    if detalle:
+        nuevo.fecha_inicio = detalle.fecha_inicio
+        nuevo.fecha_fin = detalle.fecha_fin
     db.add(nuevo)
     db.commit()
     db.refresh(nuevo)

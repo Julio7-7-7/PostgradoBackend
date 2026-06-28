@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict
-from datetime import datetime
+from datetime import datetime, date
 from enum import Enum
 from schemas.docente import DocenteResponse
 
@@ -23,11 +23,15 @@ class ContratacionDocenteCreate(ContratacionDocenteBase):
 
 class ContratacionDocenteUpdate(BaseModel):
     monto: float | None = None
+    fecha_inicio: date | None = None
+    fecha_fin: date | None = None
     estado: ContratacionEstadoEnum | None = None
 
 
 class ContratacionDocenteResponse(ContratacionDocenteBase):
     id_contratacion: int
+    fecha_inicio: date | None = None
+    fecha_fin: date | None = None
     estado: ContratacionEstadoEnum
     docente: DocenteResponse
     created_at: datetime
