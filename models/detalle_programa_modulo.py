@@ -38,3 +38,11 @@ class DetalleProgramaModulo(Base):
     @property
     def edicion(self) -> int:
         return self.programa_version_edicion.edicion
+
+    @property
+    def programa_nombre(self) -> str:
+        return self.programa_version_edicion.programa_version.programa.nombre_programa
+
+    @property
+    def programa_version_numero(self) -> int:
+        return self.programa_version_edicion.programa_version.version

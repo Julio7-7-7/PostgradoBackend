@@ -9,6 +9,7 @@ from models.historial_modulo import HistorialModulo
 from models.contratacion_docente import ContratacionDocente
 from models.modalidad import Modalidad
 from models.modulo import Modulo
+from models.programa_version import ProgramaVersion
 from models.programa_version_edicion import ProgramaVersionEdicion
 from schemas.detalle_programa_modulo import DetalleProgramaModuloCreate, DetalleProgramaModuloUpdate, DetalleProgramaModuloResponse, ReordenarRequest
 from schemas.contrataciones_docente import ContratacionDocenteResponse
@@ -45,7 +46,9 @@ def query_base(db):
         joinedload(DetalleProgramaModulo.modulo),
         joinedload(DetalleProgramaModulo.modalidad),
         joinedload(DetalleProgramaModulo.contrataciones).joinedload(ContratacionDocente.docente),
-        joinedload(DetalleProgramaModulo.programa_version_edicion).joinedload(ProgramaVersionEdicion.programa_version),
+        joinedload(DetalleProgramaModulo.programa_version_edicion)
+            .joinedload(ProgramaVersionEdicion.programa_version)
+            .joinedload(ProgramaVersion.programa),
     )
 
 def poblar_docente_y_contratacion(detalles: list[DetalleProgramaModulo] | DetalleProgramaModulo):

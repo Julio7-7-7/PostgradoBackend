@@ -66,6 +66,8 @@ class DetalleProgramaModuloResponse(DetalleProgramaModuloBase):
     id_programa_version: int
     id_programa: int
     edicion: int
+    programa_nombre: str
+    programa_version_numero: int
     modulo: ModuloResponse
     docente: DocenteResponse | None = None
     modalidad: ModalidadResponse | None = None
