@@ -26,7 +26,7 @@ class ContratacionDocente(Base):
     monto = Column(Numeric(10, 2), nullable=True)
     fecha_inicio = Column(Date, nullable=True)
     fecha_fin = Column(Date, nullable=True)
-    estado = Column(String(20), nullable=False, default="pendiente")
+    estado = Column(String(30), nullable=False, default="pendiente")
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 

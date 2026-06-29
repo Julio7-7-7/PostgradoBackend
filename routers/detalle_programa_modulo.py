@@ -211,29 +211,54 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
         if not db.query(Modalidad).filter(Modalidad.id_modalidad == data.id_modalidad).first():
             raise HTTPException(status_code=400, detail=f"Modalidad con id {data.id_modalidad} no encontrado")
 
-    if data.estado:
-        validar_transicion(detalle.estado, data.estado)
+    old_estado = detalle.estado
+    old_fecha_inicio = detalle.fecha_inicio
+    old_fecha_fin = detalle.fecha_fin
 
-        if data.estado in ESTADOS_CON_MOTIVO:
-            if not data.motivo:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"El campo motivo es obligatorio cuando el estado es {data.estado}"
-                )
-            if len(data.motivo.strip()) < 5:
-                raise HTTPException(
-                    status_code=400,
-                    detail="El motivo debe tener al menos 5 caracteres"
-                )
+    estado_changed = data.estado is not None and data.estado != old_estado
+    inicio_changed = data.fecha_inicio is not None and data.fecha_inicio != old_fecha_inicio
+    fin_changed = data.fecha_fin is not None and data.fecha_fin != old_fecha_fin
 
-        motivo = data.motivo.strip() if data.motivo else f"Cambio manual de '{detalle.estado}' a '{data.estado}'"
+    if estado_changed or inicio_changed or fin_changed:
+        if estado_changed:
+            validar_transicion(old_estado, data.estado)
+
+            if data.estado in ESTADOS_CON_MOTIVO:
+                if not data.motivo:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"El campo motivo es obligatorio cuando el estado es {data.estado}"
+                    )
+                if len(data.motivo.strip()) < 5:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="El motivo debe tener al menos 5 caracteres"
+                    )
+
+        partes = []
+        if estado_changed:
+            partes.append(f"estado: '{old_estado}' → '{data.estado}'")
+        if inicio_changed:
+            partes.append(f"fecha inicio: {old_fecha_inicio} → {data.fecha_inicio}")
+        if fin_changed:
+            partes.append(f"fecha fin: {old_fecha_fin} → {data.fecha_fin}")
+
+        if data.motivo:
+            motivo = data.motivo.strip()
+        elif estado_changed:
+            motivo = f"Cambio manual — {', '.join(partes)}"
+        else:
+            motivo = "Modificación de " + ", ".join(partes)
+
         historial = HistorialModulo(
             id_detalle_programa_modulo=id,
-            estado_anterior=detalle.estado,
-            estado_nuevo=data.estado,
+            estado_anterior=old_estado if estado_changed else None,
+            estado_nuevo=data.estado if estado_changed else None,
             motivo=motivo,
-            fecha_inicio_original=detalle.fecha_inicio,
-            fecha_fin_original=detalle.fecha_fin
+            fecha_inicio_original=old_fecha_inicio if inicio_changed else None,
+            fecha_inicio_nuevo=data.fecha_inicio if inicio_changed else None,
+            fecha_fin_original=old_fecha_fin if fin_changed else None,
+            fecha_fin_nuevo=data.fecha_fin if fin_changed else None,
         )
         db.add(historial)
 

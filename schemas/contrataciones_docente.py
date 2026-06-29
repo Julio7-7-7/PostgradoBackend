@@ -6,7 +6,11 @@ from schemas.docente import DocenteResponse
 
 class ContratacionEstadoEnum(str, Enum):
     pendiente = "pendiente"
-    en_curso = "en_curso"
+    verificacion = "verificacion"
+    convocatoria = "convocatoria"
+    seleccion = "seleccion"
+    resolucion = "resolucion"
+    legal = "legal"
     formalizado = "formalizado"
     truncado = "truncado"
 
