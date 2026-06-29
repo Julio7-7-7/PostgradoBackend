@@ -30,7 +30,7 @@ def listar_por_detalle_enriquecido(id_detalle: int, db: Session = Depends(get_db
         .all()
     )
 
-    detalle = db.query(DetalleProgramaModulo).options(
+    detalle_obj = db.query(DetalleProgramaModulo).options(
         joinedload(DetalleProgramaModulo.modulo),
         joinedload(DetalleProgramaModulo.programa_version_edicion)
             .joinedload(ProgramaVersionEdicion.programa_version)
@@ -40,21 +40,21 @@ def listar_por_detalle_enriquecido(id_detalle: int, db: Session = Depends(get_db
     ).first()
 
     contexto = None
-    if detalle:
+    if detalle_obj:
         contexto = {
-            "programa_nombre": detalle.programa_nombre,
-            "programa_version": detalle.programa_version_numero,
-            "edicion": detalle.edicion,
-            "modulo_sigla": detalle.modulo.sigla,
-            "modulo_nombre": detalle.modulo.nombre_modulo,
-            "orden": detalle.orden,
+            "programa_nombre": detalle_obj.programa_nombre,
+            "programa_version": detalle_obj.programa_version_numero,
+            "edicion": detalle_obj.edicion,
+            "modulo_sigla": detalle_obj.modulo.sigla,
+            "modulo_nombre": detalle_obj.modulo.nombre_modulo,
+            "orden": detalle_obj.orden,
         }
 
     return [
-        HistorialModuloResponseEnriquecido.model_validate({
-            **{c.name: getattr(h, c.name) for c in h.__table__.columns},
-            "detalle": contexto,
-        })
+        HistorialModuloResponseEnriquecido(
+            **HistorialModuloResponse.model_validate(h, from_attributes=True).model_dump(),
+            detalle=contexto,
+        )
         for h in historiales
     ]
 
