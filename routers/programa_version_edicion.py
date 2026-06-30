@@ -180,7 +180,6 @@ def crear(data: ProgramaVersionEdicionCreate, db: Session = Depends(get_db)):
         detalle = DetalleProgramaModulo(
             id_programa_version_edicion=nueva.id_programa_version_edicion,
             id_modulo=modulo.id_modulo,
-            id_docente=None,
             orden=orden,
             estado="programado"
         )
