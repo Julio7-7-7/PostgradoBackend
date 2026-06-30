@@ -1,7 +1,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, not_
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from models.detalle_programa_modulo import DetalleProgramaModulo
@@ -161,7 +161,13 @@ def reordenar(data: ReordenarRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/", response_model=list[DetalleProgramaModuloResponse])
-def listar(edicion_id: int | None = None, id_docente: int | None = None, db: Session = Depends(get_db)):
+def listar(
+    edicion_id: int | None = None,
+    id_docente: int | None = None,
+    programa_id: int | None = None,
+    disponible: bool | None = None,
+    db: Session = Depends(get_db),
+):
     query = query_base(db)
     if edicion_id:
         query = query.filter(DetalleProgramaModulo.id_programa_version_edicion == edicion_id)
@@ -171,6 +177,20 @@ def listar(edicion_id: int | None = None, id_docente: int | None = None, db: Ses
             ContratacionDocente.estado != "truncado",
         )
         query = query.filter(DetalleProgramaModulo.id_detalle_programa_modulo.in_(subq))
+    if programa_id:
+        query = (
+            query
+            .join(DetalleProgramaModulo.programa_version_edicion)
+            .join(ProgramaVersionEdicion.programa_version)
+            .filter(ProgramaVersion.id_programa == programa_id)
+        )
+    if disponible:
+        subq_activa = select(ContratacionDocente.id_detalle_modulo).where(
+            ContratacionDocente.estado != "truncado",
+        )
+        query = query.filter(
+            not_(DetalleProgramaModulo.id_detalle_programa_modulo.in_(subq_activa))
+        )
     resultados = query.all()
     cambios = False
     for d in resultados:
