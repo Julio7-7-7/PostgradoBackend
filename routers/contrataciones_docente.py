@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import or_
 from database import get_db
 from models.contratacion_docente import ContratacionDocente
 from models.docente import Docente
 from models.detalle_programa_modulo import DetalleProgramaModulo
+from models.programa_version_edicion import ProgramaVersionEdicion
+from models.programa_version import ProgramaVersion
 from schemas.contrataciones_docente import (
     ContratacionDocenteCreate,
     ContratacionDocenteUpdate,
@@ -62,6 +65,8 @@ def listar(
     docente_id: int | None = None,
     detalle_id: int | None = None,
     estado: str | None = None,
+    q: str | None = None,
+    programa_id: int | None = None,
     db: Session = Depends(get_db),
 ):
     query = query_base(db)
@@ -71,6 +76,21 @@ def listar(
         query = query.filter(ContratacionDocente.id_detalle_modulo == detalle_id)
     if estado:
         query = query.filter(ContratacionDocente.estado == estado)
+    if q:
+        query = query.join(ContratacionDocente.docente).filter(
+            or_(
+                Docente.nombre.ilike(f"%{q}%"),
+                Docente.apellido.ilike(f"%{q}%"),
+            )
+        )
+    if programa_id:
+        query = (
+            query
+            .join(ContratacionDocente.detalle_modulo)
+            .join(DetalleProgramaModulo.programa_version_edicion)
+            .join(ProgramaVersionEdicion.programa_version)
+            .filter(ProgramaVersion.id_programa == programa_id)
+        )
     return query.all()
 
 

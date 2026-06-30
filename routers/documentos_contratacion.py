@@ -19,10 +19,32 @@ router = APIRouter(
 )
 
 RUTA_DOCUMENTAL = [
-    {"tipo": "invitacion",  "gatillo": "en_curso"},
-    {"tipo": "aceptacion",  "gatillo": None},
-    {"tipo": "solicitud",   "gatillo": None},
-    {"tipo": "contrato",    "gatillo": "formalizado"},
+    # Etapa 1: Presupuesto
+    {"tipo": "solicitud_verificacion_saldos",       "gatillo": "verificacion",  "etapa": "presupuesto"},
+    {"tipo": "remision_saldo",                      "gatillo": None,            "etapa": "presupuesto"},
+    {"tipo": "resolucion_dg_verificacion",          "gatillo": None,            "etapa": "presupuesto"},
+    # Etapa 2: Convocatoria
+    {"tipo": "terminos_referencia",                 "gatillo": "convocatoria",  "etapa": "convocatoria"},
+    {"tipo": "solicitud_contratacion_consultor",    "gatillo": None,            "etapa": "convocatoria"},
+    {"tipo": "acta_inicio_proceso",                 "gatillo": None,            "etapa": "convocatoria"},
+    # Etapa 3: Selección
+    {"tipo": "seleccion_docente",                   "gatillo": "seleccion",     "etapa": "seleccion"},
+    {"tipo": "invitacion_dictar_modulo",            "gatillo": None,            "etapa": "seleccion"},
+    {"tipo": "respuesta_invitacion",                "gatillo": None,            "etapa": "seleccion"},
+    # Etapa 4: Resolución
+    {"tipo": "resolucion_comite_academico",         "gatillo": "resolucion",    "etapa": "resolucion"},
+    {"tipo": "resolucion_consejo_directivo",        "gatillo": None,            "etapa": "resolucion"},
+    {"tipo": "resolucion_dg_designacion",           "gatillo": None,            "etapa": "resolucion"},
+    # Etapa 5: Legal
+    {"tipo": "solicitud_antecedentes",              "gatillo": "legal",         "etapa": "legal"},
+    {"tipo": "formulario_antecedentes",             "gatillo": None,            "etapa": "legal"},
+    {"tipo": "remision_proceso_contratacion",       "gatillo": None,            "etapa": "legal"},
+    {"tipo": "formulario_notarial",                 "gatillo": None,            "etapa": "legal"},
+    {"tipo": "informe_tecnico_recomendacion",       "gatillo": None,            "etapa": "legal"},
+    {"tipo": "resolucion_administrativa",           "gatillo": None,            "etapa": "legal"},
+    {"tipo": "informe_legal",                       "gatillo": None,            "etapa": "legal"},
+    # Etapa 6: Contrato
+    {"tipo": "contrato",                            "gatillo": "formalizado",   "etapa": "contrato"},
 ]
 
 TIPO_POSICION = {step["tipo"]: i for i, step in enumerate(RUTA_DOCUMENTAL)}
@@ -58,7 +80,7 @@ def crear(data: DocumentoContratacionCreate, db: Session = Depends(get_db)):
         )
 
     paso_esperado = RUTA_DOCUMENTAL[siguiente_orden]
-    if data.tipo.value != paso_esperado["tipo"]:
+    if data.tipo != paso_esperado["tipo"]:
         raise HTTPException(
             status_code=400,
             detail=f"El siguiente documento debe ser '{paso_esperado['tipo']}'",
@@ -73,7 +95,7 @@ def crear(data: DocumentoContratacionCreate, db: Session = Depends(get_db)):
 
     nuevo = DocumentoContratacion(
         id_contratacion=data.id_contratacion,
-        tipo=data.tipo.value,
+        tipo=data.tipo,
         archivo_pdf=ruta_pdf,
         orden=siguiente_orden,
     )

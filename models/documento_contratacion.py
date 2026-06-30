@@ -13,7 +13,7 @@ class DocumentoContratacion(Base):
         ForeignKey("contratacion_docente.id_contratacion"),
         nullable=False,
     )
-    tipo = Column(String(30), nullable=False)
+    tipo = Column(String(80), nullable=False)
     archivo_pdf = Column(String(500), nullable=True)
     fecha_subida = Column(DateTime, server_default=func.now(), nullable=False)
     orden = Column(Integer, nullable=False)

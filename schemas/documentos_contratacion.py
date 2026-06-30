@@ -3,16 +3,9 @@ from datetime import datetime
 from enum import Enum
 
 
-class TipoDocumentoContratoEnum(str, Enum):
-    invitacion = "invitacion"
-    aceptacion = "aceptacion"
-    solicitud = "solicitud"
-    contrato = "contrato"
-
-
 class DocumentoContratacionBase(BaseModel):
     id_contratacion: int
-    tipo: TipoDocumentoContratoEnum
+    tipo: str
 
 
 class DocumentoContratacionCreate(DocumentoContratacionBase):
