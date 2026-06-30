@@ -73,7 +73,9 @@ def actualizar_estado_auto(detalle: DetalleProgramaModulo, db: Session) -> bool:
             estado_nuevo="en_curso",
             motivo=MOTIVO_AUTO_EN_CURSO,
             fecha_inicio_original=detalle.fecha_inicio,
+            fecha_inicio_nuevo=detalle.fecha_inicio,
             fecha_fin_original=detalle.fecha_fin,
+            fecha_fin_nuevo=detalle.fecha_fin,
         )
         db.add(historial)
         return True
@@ -86,7 +88,9 @@ def actualizar_estado_auto(detalle: DetalleProgramaModulo, db: Session) -> bool:
             estado_nuevo="finalizado",
             motivo=MOTIVO_AUTO_FINALIZADO,
             fecha_inicio_original=detalle.fecha_inicio,
+            fecha_inicio_nuevo=detalle.fecha_inicio,
             fecha_fin_original=detalle.fecha_fin,
+            fecha_fin_nuevo=detalle.fecha_fin,
         )
         db.add(historial)
         return True
@@ -257,7 +261,7 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
 
         partes = []
         if estado_changed:
-            partes.append(f"estado: '{old_estado}' → '{data.estado}'")
+            partes.append(f"estado: '{old_estado}' → '{data.estado.value}'")
         if inicio_changed:
             partes.append(f"fecha inicio: {old_fecha_inicio} → {data.fecha_inicio}")
         if fin_changed:
@@ -273,7 +277,7 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
         historial = HistorialModulo(
             id_detalle_programa_modulo=id,
             estado_anterior=old_estado if estado_changed else None,
-            estado_nuevo=data.estado if estado_changed else None,
+            estado_nuevo=data.estado.value if estado_changed else None,
             motivo=motivo,
             fecha_inicio_original=old_fecha_inicio if inicio_changed else None,
             fecha_inicio_nuevo=data.fecha_inicio if inicio_changed else None,

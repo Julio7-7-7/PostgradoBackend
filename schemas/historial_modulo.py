@@ -24,6 +24,7 @@ class DetalleContexto(BaseModel):
     modulo_sigla: str
     modulo_nombre: str
     orden: int
+    estado_actual: str | None = None
 
 class HistorialModuloResponseEnriquecido(HistorialModuloResponse):
     detalle: DetalleContexto | None = None
