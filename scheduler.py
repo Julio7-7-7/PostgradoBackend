@@ -30,6 +30,18 @@ def auto_actualizar_estados():
                 ))
                 cambios += 1
 
+            elif d.estado == "reprogramado" and d.fecha_inicio and d.fecha_inicio <= hoy:
+                d.estado = "en_curso"
+                db.add(HistorialModulo(
+                    id_detalle_programa_modulo=d.id_detalle_programa_modulo,
+                    estado_anterior="reprogramado",
+                    estado_nuevo="en_curso",
+                    motivo=MOTIVO_AUTO_EN_CURSO,
+                    fecha_inicio_original=d.fecha_inicio,
+                    fecha_fin_original=d.fecha_fin,
+                ))
+                cambios += 1
+
             elif d.estado == "en_curso" and d.fecha_fin and d.fecha_fin < hoy:
                 d.estado = "finalizado"
                 db.add(HistorialModulo(

@@ -12,21 +12,43 @@ router = APIRouter(
     tags=["Historial Modulo"]
 )
 
+
+def _build_contexto(detalle: DetalleProgramaModulo) -> dict:
+    return {
+        "programa_nombre": detalle.programa_nombre,
+        "programa_version": detalle.programa_version_numero,
+        "edicion": detalle.edicion,
+        "modulo_sigla": detalle.modulo.sigla,
+        "modulo_nombre": detalle.modulo.nombre_modulo,
+        "orden": detalle.orden,
+        "estado_actual": detalle.estado,
+    }
+
+
+def _enriquecer(h: HistorialModulo, contexto: dict | None) -> HistorialModuloResponseEnriquecido:
+    base = HistorialModuloResponse.model_validate(h, from_attributes=True)
+    return HistorialModuloResponseEnriquecido(
+        **base.model_dump(),
+        detalle=contexto,
+    )
+
+
 @router.get("/detalle/{id_detalle}", response_model=list[HistorialModuloResponse])
 def listar_por_detalle(id_detalle: int, db: Session = Depends(get_db)):
     return (
         db.query(HistorialModulo)
         .filter(HistorialModulo.id_detalle_programa_modulo == id_detalle)
-        .order_by(HistorialModulo.created_at.desc())
+        .order_by(HistorialModulo.created_at.asc())
         .all()
     )
+
 
 @router.get("/detalle/{id_detalle}/enriquecido", response_model=list[HistorialModuloResponseEnriquecido])
 def listar_por_detalle_enriquecido(id_detalle: int, db: Session = Depends(get_db)):
     historiales = (
         db.query(HistorialModulo)
         .filter(HistorialModulo.id_detalle_programa_modulo == id_detalle)
-        .order_by(HistorialModulo.created_at.desc())
+        .order_by(HistorialModulo.created_at.asc())
         .all()
     )
 
@@ -39,24 +61,39 @@ def listar_por_detalle_enriquecido(id_detalle: int, db: Session = Depends(get_db
         DetalleProgramaModulo.id_detalle_programa_modulo == id_detalle
     ).first()
 
-    contexto = None
-    if detalle_obj:
-        contexto = {
-            "programa_nombre": detalle_obj.programa_nombre,
-            "programa_version": detalle_obj.programa_version_numero,
-            "edicion": detalle_obj.edicion,
-            "modulo_sigla": detalle_obj.modulo.sigla,
-            "modulo_nombre": detalle_obj.modulo.nombre_modulo,
-            "orden": detalle_obj.orden,
-        }
+    contexto = _build_contexto(detalle_obj) if detalle_obj else None
+    return [_enriquecer(h, contexto) for h in historiales]
+
+
+@router.get("/edicion/{id_edicion}", response_model=list[HistorialModuloResponseEnriquecido])
+def listar_por_edicion(id_edicion: int, db: Session = Depends(get_db)):
+    detalles = db.query(DetalleProgramaModulo).options(
+        joinedload(DetalleProgramaModulo.modulo),
+        joinedload(DetalleProgramaModulo.programa_version_edicion)
+            .joinedload(ProgramaVersionEdicion.programa_version)
+            .joinedload(ProgramaVersion.programa),
+    ).filter(
+        DetalleProgramaModulo.id_programa_version_edicion == id_edicion
+    ).all()
+
+    if not detalles:
+        return []
+
+    detalle_ids = [d.id_detalle_programa_modulo for d in detalles]
+    contexto_map = {d.id_detalle_programa_modulo: _build_contexto(d) for d in detalles}
+
+    historiales = (
+        db.query(HistorialModulo)
+        .filter(HistorialModulo.id_detalle_programa_modulo.in_(detalle_ids))
+        .order_by(HistorialModulo.created_at.asc())
+        .all()
+    )
 
     return [
-        HistorialModuloResponseEnriquecido(
-            **HistorialModuloResponse.model_validate(h, from_attributes=True).model_dump(),
-            detalle=contexto,
-        )
+        _enriquecer(h, contexto_map.get(h.id_detalle_programa_modulo))
         for h in historiales
     ]
+
 
 @router.get("/{id}", response_model=HistorialModuloResponse)
 def obtener(id: int, db: Session = Depends(get_db)):
