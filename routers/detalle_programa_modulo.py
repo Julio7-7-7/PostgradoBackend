@@ -80,6 +80,7 @@ def actualizar_estado_auto(detalle: DetalleProgramaModulo, db: Session) -> bool:
             fecha_fin_nuevo=detalle.fecha_fin,
         )
         db.add(historial)
+        actualizar_estado_edicion(detalle.id_programa_version_edicion, db)
         return True
 
     if detalle.estado == "reprogramado" and detalle.fecha_inicio and detalle.fecha_inicio <= hoy:
@@ -95,6 +96,7 @@ def actualizar_estado_auto(detalle: DetalleProgramaModulo, db: Session) -> bool:
             fecha_fin_nuevo=detalle.fecha_fin,
         )
         db.add(historial)
+        actualizar_estado_edicion(detalle.id_programa_version_edicion, db)
         return True
 
     if detalle.estado == "en_curso" and detalle.fecha_fin and detalle.fecha_fin < hoy:
@@ -110,8 +112,40 @@ def actualizar_estado_auto(detalle: DetalleProgramaModulo, db: Session) -> bool:
             fecha_fin_nuevo=detalle.fecha_fin,
         )
         db.add(historial)
+        actualizar_estado_edicion(detalle.id_programa_version_edicion, db)
         return True
 
+    return False
+
+def actualizar_estado_edicion(id_edicion: int, db: Session) -> bool:
+    edicion = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion == id_edicion
+    ).first()
+    if not edicion:
+        return False
+
+    detalles = db.query(DetalleProgramaModulo).filter(
+        DetalleProgramaModulo.id_programa_version_edicion == id_edicion
+    ).all()
+    if not detalles:
+        return False
+
+    estados = [d.estado for d in detalles]
+
+    if all(e == "finalizado" for e in estados):
+        nuevo = "finalizado"
+    elif any(e == "reprogramado" for e in estados) and not any(e == "finalizado" for e in estados):
+        nuevo = "reprogramado"
+    elif any(e in ("en_curso", "reprogramado") for e in estados):
+        nuevo = "en_curso"
+    elif any(e == "finalizado" for e in estados):
+        nuevo = "en_curso"
+    else:
+        nuevo = "programado"
+
+    if edicion.estado != nuevo:
+        edicion.estado = nuevo
+        return True
     return False
 
 @router.post("/", response_model=DetalleProgramaModuloResponse, status_code=201)
@@ -325,6 +359,7 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
 
         if estado_changed:
             detalle.estado = estado_solicitado
+            actualizar_estado_edicion(detalle.id_programa_version_edicion, db)
         if inicio_changed:
             detalle.fecha_inicio = fecha_inicio
         if fin_changed:
