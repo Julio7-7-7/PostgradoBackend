@@ -246,8 +246,6 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
     if not detalle:
         raise HTTPException(status_code=404, detail="No encontrado")
 
-    actualizar_estado_auto(detalle, db)
-
     if data.id_modalidad is not None:
         if not db.query(Modalidad).filter(Modalidad.id_modalidad == data.id_modalidad).first():
             raise HTTPException(status_code=400, detail=f"Modalidad con id {data.id_modalidad} no encontrado")
@@ -302,7 +300,7 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
             partes.append(f"fecha fin: {detalle.fecha_fin} → {fecha_fin}")
 
         if data.motivo:
-            motivo = data.motivo.strip()
+            motivo = f"Cambio manual — {data.motivo.strip()}"
         elif estado_changed:
             motivo = f"Cambio manual — {', '.join(partes)}"
         else:
