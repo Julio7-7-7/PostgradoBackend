@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, not_
@@ -19,14 +19,16 @@ router = APIRouter(
     tags=["Detalle Programa Modulo"]
 )
 
+DURACION_MINIMA_DIAS = 30
+
 ESTADOS_CON_MOTIVO = {"reprogramado"}
 MOTIVO_AUTO_EN_CURSO = "Cambiado a estado en curso por fechas"
 MOTIVO_AUTO_FINALIZADO = "Cambiado a estado finalizado por fecha de fin"
 
 ESTADO_TRANSICIONES = {
-    "programado": {"en_curso", "reprogramado"},
+    "programado": {"en_curso"},
     "en_curso": {"reprogramado", "finalizado"},
-    "reprogramado": {"programado", "en_curso"},
+    "reprogramado": {"en_curso"},
     "finalizado": set(),
 }
 
@@ -70,6 +72,21 @@ def actualizar_estado_auto(detalle: DetalleProgramaModulo, db: Session) -> bool:
         historial = HistorialModulo(
             id_detalle_programa_modulo=detalle.id_detalle_programa_modulo,
             estado_anterior="programado",
+            estado_nuevo="en_curso",
+            motivo=MOTIVO_AUTO_EN_CURSO,
+            fecha_inicio_original=detalle.fecha_inicio,
+            fecha_inicio_nuevo=detalle.fecha_inicio,
+            fecha_fin_original=detalle.fecha_fin,
+            fecha_fin_nuevo=detalle.fecha_fin,
+        )
+        db.add(historial)
+        return True
+
+    if detalle.estado == "reprogramado" and detalle.fecha_inicio and detalle.fecha_inicio <= hoy:
+        detalle.estado = "en_curso"
+        historial = HistorialModulo(
+            id_detalle_programa_modulo=detalle.id_detalle_programa_modulo,
+            estado_anterior="reprogramado",
             estado_nuevo="en_curso",
             motivo=MOTIVO_AUTO_EN_CURSO,
             fecha_inicio_original=detalle.fecha_inicio,
@@ -235,23 +252,40 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
         if not db.query(Modalidad).filter(Modalidad.id_modalidad == data.id_modalidad).first():
             raise HTTPException(status_code=400, detail=f"Modalidad con id {data.id_modalidad} no encontrado")
 
-    old_estado = detalle.estado
-    old_fecha_inicio = detalle.fecha_inicio
-    old_fecha_fin = detalle.fecha_fin
+    estado_solicitado = data.estado
+    fecha_inicio = data.fecha_inicio
+    fecha_fin = data.fecha_fin
 
-    estado_changed = data.estado is not None and data.estado != old_estado
-    inicio_changed = data.fecha_inicio is not None and data.fecha_inicio != old_fecha_inicio
-    fin_changed = data.fecha_fin is not None and data.fecha_fin != old_fecha_fin
+    estado_changed = estado_solicitado is not None and estado_solicitado != detalle.estado
+
+    # Auto-fechas al pasar a en_curso
+    if estado_solicitado == "en_curso" and estado_changed:
+        if fecha_inicio is None:
+            fecha_inicio = date.today()
+        if fecha_fin is None:
+            fecha_fin = fecha_inicio + timedelta(days=DURACION_MINIMA_DIAS)
+
+    inicio_changed = fecha_inicio is not None and fecha_inicio != detalle.fecha_inicio
+    fin_changed = fecha_fin is not None and fecha_fin != detalle.fecha_fin
+
+    # Validar duración mínima si hay fechas
+    if fecha_inicio and fecha_fin:
+        diff = (fecha_fin - fecha_inicio).days
+        if diff < DURACION_MINIMA_DIAS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"La duración mínima del módulo es de {DURACION_MINIMA_DIAS} días (actual: {diff})"
+            )
 
     if estado_changed or inicio_changed or fin_changed:
         if estado_changed:
-            validar_transicion(old_estado, data.estado)
+            validar_transicion(detalle.estado, estado_solicitado)
 
-            if data.estado in ESTADOS_CON_MOTIVO:
+            if estado_solicitado in ESTADOS_CON_MOTIVO:
                 if not data.motivo:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"El campo motivo es obligatorio cuando el estado es {data.estado}"
+                        detail=f"El campo motivo es obligatorio cuando el estado es {estado_solicitado}"
                     )
                 if len(data.motivo.strip()) < 5:
                     raise HTTPException(
@@ -261,11 +295,11 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
 
         partes = []
         if estado_changed:
-            partes.append(f"estado: '{old_estado}' → '{data.estado.value}'")
+            partes.append(f"estado: '{detalle.estado}' → '{estado_solicitado}'")
         if inicio_changed:
-            partes.append(f"fecha inicio: {old_fecha_inicio} → {data.fecha_inicio}")
+            partes.append(f"fecha inicio: {detalle.fecha_inicio} → {fecha_inicio}")
         if fin_changed:
-            partes.append(f"fecha fin: {old_fecha_fin} → {data.fecha_fin}")
+            partes.append(f"fecha fin: {detalle.fecha_fin} → {fecha_fin}")
 
         if data.motivo:
             motivo = data.motivo.strip()
@@ -276,15 +310,22 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
 
         historial = HistorialModulo(
             id_detalle_programa_modulo=id,
-            estado_anterior=old_estado if estado_changed else None,
-            estado_nuevo=data.estado.value if estado_changed else None,
+            estado_anterior=detalle.estado if estado_changed else None,
+            estado_nuevo=estado_solicitado if estado_changed else None,
             motivo=motivo,
-            fecha_inicio_original=old_fecha_inicio if inicio_changed else None,
-            fecha_inicio_nuevo=data.fecha_inicio if inicio_changed else None,
-            fecha_fin_original=old_fecha_fin if fin_changed else None,
-            fecha_fin_nuevo=data.fecha_fin if fin_changed else None,
+            fecha_inicio_original=detalle.fecha_inicio if inicio_changed else None,
+            fecha_inicio_nuevo=fecha_inicio if inicio_changed else None,
+            fecha_fin_original=detalle.fecha_fin if fin_changed else None,
+            fecha_fin_nuevo=fecha_fin if fin_changed else None,
         )
         db.add(historial)
+
+        if estado_changed:
+            detalle.estado = estado_solicitado
+        if inicio_changed:
+            detalle.fecha_inicio = fecha_inicio
+        if fin_changed:
+            detalle.fecha_fin = fecha_fin
 
     if data.orden is not None:
         orden_existente = db.query(DetalleProgramaModulo).filter(
@@ -294,9 +335,10 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
         ).first()
         if orden_existente:
             raise HTTPException(status_code=400, detail=f"Ya existe un módulo con orden {data.orden} en esta edición")
+        detalle.orden = data.orden
 
-    for key, value in data.model_dump(exclude_unset=True, exclude={"motivo"}).items():
-        setattr(detalle, key, value)
+    if data.id_modalidad is not None:
+        detalle.id_modalidad = data.id_modalidad
 
     db.commit()
     detalle = query_base(db).filter(
