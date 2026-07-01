@@ -140,6 +140,37 @@ def query_base(db):
         joinedload(ProgramaVersionEdicion.modalidad)
     )
 
+def actualizar_estado_edicion(id_edicion: int, db: Session) -> bool:
+    edicion = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion == id_edicion
+    ).first()
+    if not edicion:
+        return False
+
+    detalles = db.query(DetalleProgramaModulo).filter(
+        DetalleProgramaModulo.id_programa_version_edicion == id_edicion
+    ).all()
+    if not detalles:
+        return False
+
+    estados = [d.estado for d in detalles]
+
+    if all(e == "finalizado" for e in estados):
+        nuevo = "finalizado"
+    elif any(e == "reprogramado" for e in estados) and not any(e == "finalizado" for e in estados):
+        nuevo = "reprogramado"
+    elif any(e in ("en_curso", "reprogramado") for e in estados):
+        nuevo = "en_curso"
+    elif any(e == "finalizado" for e in estados):
+        nuevo = "en_curso"
+    else:
+        nuevo = "programado"
+
+    if edicion.estado != nuevo:
+        edicion.estado = nuevo
+        return True
+    return False
+
 @router.post("/", response_model=ProgramaVersionEdicionResponse, status_code=201)
 def crear(data: ProgramaVersionEdicionCreate, db: Session = Depends(get_db)):
     validar_cupo(data.id_programa_version, data.cupo_maximo, db)
@@ -150,7 +181,7 @@ def crear(data: ProgramaVersionEdicionCreate, db: Session = Depends(get_db)):
     gestion = data.gestion if data.gestion else calcular_gestion(db, data.id_programa_version)
     validar_gestion_fecha(gestion, data.fecha_inicio, es_historico=data.es_historico)
 
-    data_dict = data.model_dump(exclude={"gestion", "edicion"})
+    data_dict = data.model_dump(exclude={"gestion", "edicion", "estado"})
     if data.edicion:
         num_edicion = data.edicion
         existe = db.query(ProgramaVersionEdicion).filter(
@@ -166,7 +197,8 @@ def crear(data: ProgramaVersionEdicionCreate, db: Session = Depends(get_db)):
     nueva = ProgramaVersionEdicion(
         **data_dict,
         edicion=num_edicion,
-        gestion=gestion
+        gestion=gestion,
+        estado="programado"
     )
     db.add(nueva)
     db.flush()
@@ -195,7 +227,7 @@ def listar(programa_version_id: int | None = None, activas: bool | None = None, 
     if programa_version_id:
         query = query.filter(ProgramaVersionEdicion.id_programa_version == programa_version_id)
     if activas:
-        query = query.filter(ProgramaVersionEdicion.estado.in_(["programado", "en_curso"]))
+        query = query.filter(ProgramaVersionEdicion.estado.in_(["programado", "en_curso", "reprogramado"]))
     query = query.order_by(ProgramaVersionEdicion.fecha_inicio.asc().nullslast())
     return query.all()
 

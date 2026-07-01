@@ -7,9 +7,8 @@ from schemas.modalidad import ModalidadResponse
 class EstadoEdicionEnum(str, Enum):
     programado = "programado"
     en_curso = "en_curso"
-    pausado = "pausado"
+    reprogramado = "reprogramado"
     finalizado = "finalizado"
-    cancelado = "cancelado"
 
 class ProgramaVersionEdicionBase(BaseModel):
     id_programa_version: int
@@ -58,7 +57,6 @@ class ProgramaVersionEdicionUpdate(BaseModel):
     id_modalidad: int | None = None
     gestion: str | None = None
     es_historico: bool | None = None
-    estado: EstadoEdicionEnum | None = None
     fecha_inicio: date | None = None
     fecha_fin: date | None = None
     cupo_maximo: int | None = None
