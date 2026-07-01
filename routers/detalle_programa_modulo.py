@@ -266,6 +266,11 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
     inicio_changed = fecha_inicio is not None and fecha_inicio != detalle.fecha_inicio
     fin_changed = fecha_fin is not None and fecha_fin != detalle.fecha_fin
 
+    # Auto reprogramado al modificar fechas de un módulo en curso
+    if detalle.estado == "en_curso" and not estado_changed and (inicio_changed or fin_changed):
+        estado_solicitado = "reprogramado"
+        estado_changed = True
+
     # Validar duración mínima si hay fechas
     if fecha_inicio and fecha_fin:
         diff = (fecha_fin - fecha_inicio).days
