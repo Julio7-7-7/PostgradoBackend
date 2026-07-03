@@ -17,8 +17,6 @@ def query_detail(db):
         joinedload(Horario.detalle_programa_modulo)
         .joinedload(DetalleProgramaModulo.modulo),
         joinedload(Horario.detalle_programa_modulo)
-        .joinedload(DetalleProgramaModulo.modalidad),
-        joinedload(Horario.detalle_programa_modulo)
         .joinedload(DetalleProgramaModulo.contrataciones)
         .joinedload(ContratacionDocente.docente),
     )

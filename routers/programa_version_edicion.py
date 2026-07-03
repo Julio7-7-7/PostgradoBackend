@@ -136,8 +136,7 @@ def query_base(db):
     return db.query(ProgramaVersionEdicion).options(
         joinedload(ProgramaVersionEdicion.programa_version)
         .joinedload(ProgramaVersion.programa)
-        .joinedload(Programa.tipo_programa),
-        joinedload(ProgramaVersionEdicion.modalidad)
+        .joinedload(Programa.tipo_programa)
     )
 
 def actualizar_estado_edicion(id_edicion: int, db: Session) -> bool:
