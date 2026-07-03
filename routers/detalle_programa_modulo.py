@@ -7,7 +7,6 @@ from database import get_db
 from models.detalle_programa_modulo import DetalleProgramaModulo
 from models.historial_modulo import HistorialModulo
 from models.contratacion_docente import ContratacionDocente
-from models.modalidad import Modalidad
 from models.modulo import Modulo
 from models.programa_version import ProgramaVersion
 from models.programa_version_edicion import ProgramaVersionEdicion
@@ -46,7 +45,6 @@ def validar_transicion(estado_actual: str, estado_nuevo: str):
 def query_base(db):
     return db.query(DetalleProgramaModulo).options(
         joinedload(DetalleProgramaModulo.modulo),
-        joinedload(DetalleProgramaModulo.modalidad),
         joinedload(DetalleProgramaModulo.contrataciones).joinedload(ContratacionDocente.docente),
         joinedload(DetalleProgramaModulo.programa_version_edicion)
             .joinedload(ProgramaVersionEdicion.programa_version)
@@ -156,8 +154,6 @@ def crear(data: DetalleProgramaModuloCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="La edición especificada no existe")
     if not db.query(Modulo).filter(Modulo.id_modulo == data.id_modulo).first():
         raise HTTPException(status_code=400, detail="El módulo especificado no existe")
-    if data.id_modalidad is not None and not db.query(Modalidad).filter(Modalidad.id_modalidad == data.id_modalidad).first():
-        raise HTTPException(status_code=400, detail="La modalidad especificada no existe")
     orden_existente = db.query(DetalleProgramaModulo).filter(
         DetalleProgramaModulo.id_programa_version_edicion == data.id_programa_version_edicion,
         DetalleProgramaModulo.orden == data.orden
@@ -280,10 +276,6 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
     if not detalle:
         raise HTTPException(status_code=404, detail="No encontrado")
 
-    if data.id_modalidad is not None:
-        if not db.query(Modalidad).filter(Modalidad.id_modalidad == data.id_modalidad).first():
-            raise HTTPException(status_code=400, detail=f"Modalidad con id {data.id_modalidad} no encontrado")
-
     estado_solicitado = data.estado
     fecha_inicio = data.fecha_inicio
     fecha_fin = data.fecha_fin
@@ -375,8 +367,8 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
             raise HTTPException(status_code=400, detail=f"Ya existe un módulo con orden {data.orden} en esta edición")
         detalle.orden = data.orden
 
-    if data.id_modalidad is not None:
-        detalle.id_modalidad = data.id_modalidad
+    if data.modalidad is not None:
+        detalle.modalidad = data.modalidad.value
 
     db.commit()
     detalle = query_base(db).filter(

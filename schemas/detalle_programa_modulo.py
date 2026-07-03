@@ -3,8 +3,12 @@ from datetime import datetime, date
 from enum import Enum
 from schemas.modulo import ModuloResponse
 from schemas.docente import DocenteResponse
-from schemas.modalidad import ModalidadResponse
 from schemas.contrataciones_docente import ContratacionDocenteResponse
+
+class ModalidadEnum(str, Enum):
+    presencial = "presencial"
+    virtual = "virtual"
+    semipresencial = "semipresencial"
 
 class EstadoDetalleEnum(str, Enum):
     programado = "programado"
@@ -15,7 +19,7 @@ class EstadoDetalleEnum(str, Enum):
 class DetalleProgramaModuloBase(BaseModel):
     id_programa_version_edicion: int
     id_modulo: int
-    id_modalidad: int | None = None
+    modalidad: ModalidadEnum | None = None
     orden: int
     fecha_inicio: date | None = None
     fecha_fin: date | None = None
@@ -39,7 +43,7 @@ class DetalleProgramaModuloCreate(DetalleProgramaModuloBase):
     pass
 
 class DetalleProgramaModuloUpdate(BaseModel):
-    id_modalidad: int | None = None
+    modalidad: ModalidadEnum | None = None
     orden: int | None = None
     fecha_inicio: date | None = None
     fecha_fin: date | None = None
@@ -70,7 +74,7 @@ class DetalleProgramaModuloResponse(DetalleProgramaModuloBase):
     programa_version_numero: int
     modulo: ModuloResponse
     docente: DocenteResponse | None = None
-    modalidad: ModalidadResponse | None = None
+    modalidad: ModalidadEnum | None = None
     contratacion: ContratacionDocenteResponse | None = None
     created_at: datetime
     updated_at: datetime

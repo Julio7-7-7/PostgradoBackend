@@ -3,7 +3,6 @@ from routers import programa
 from routers import programa_version
 from routers import modulo
 from routers import modalidad_academica
-from routers import modalidad
 from routers import programa_version_edicion
 from routers import docente
 from routers import detalle_programa_modulo
@@ -23,7 +22,6 @@ all_routers = [
     programa_version.router,
     modulo.router,
     modalidad_academica.router,
-    modalidad.router,
     programa_version_edicion.router,
     docente.router,
     detalle_programa_modulo.router,

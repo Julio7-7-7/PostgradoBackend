@@ -2,7 +2,11 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from datetime import datetime, date
 from enum import Enum
 from schemas.programa_version import ProgramaVersionResponse
-from schemas.modalidad import ModalidadResponse
+
+class ModalidadEnum(str, Enum):
+    presencial = "presencial"
+    virtual = "virtual"
+    semipresencial = "semipresencial"
 
 class EstadoEdicionEnum(str, Enum):
     programado = "programado"
@@ -12,7 +16,7 @@ class EstadoEdicionEnum(str, Enum):
 
 class ProgramaVersionEdicionBase(BaseModel):
     id_programa_version: int
-    id_modalidad: int
+    modalidad: ModalidadEnum
     gestion: str | None = None
     es_historico: bool = False
     estado: EstadoEdicionEnum = EstadoEdicionEnum.programado
@@ -54,7 +58,7 @@ class ProgramaVersionEdicionCreate(ProgramaVersionEdicionBase):
         return v
 
 class ProgramaVersionEdicionUpdate(BaseModel):
-    id_modalidad: int | None = None
+    modalidad: ModalidadEnum | None = None
     gestion: str | None = None
     es_historico: bool | None = None
     fecha_inicio: date | None = None
@@ -81,7 +85,7 @@ class ProgramaVersionEdicionResponse(ProgramaVersionEdicionBase):
     id_programa_version_edicion: int
     edicion: int
     programa_version: ProgramaVersionResponse
-    modalidad: ModalidadResponse
+    modalidad: ModalidadEnum
     created_at: datetime
     updated_at: datetime
 
