@@ -33,4 +33,4 @@ app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")
 
 @app.get("/")
 def root():
-    return {"message": "API Posgrado funcionando ✅"}
+    return {"message": "API Posgrado funcionando al 100 ✅"}
