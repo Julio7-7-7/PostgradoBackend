@@ -104,7 +104,7 @@ def validar_fecha_inicio_unica(db: Session, id_programa_version: int, fecha_inic
     if query.first():
         raise HTTPException(
             status_code=400,
-            detail=f"Ya existe una edición con fecha de inicio {fecha_inicio} para esta versión"
+            detail=f"Ya existe una edición con fecha de inicio {fecha_inicio.strftime('%d/%m/%Y')} para esta versión"
         )
 
 def validar_gestion_fecha(semestre: int | None, anio: int | None, fecha_inicio: date | None, *, es_historico: bool = False):
@@ -113,12 +113,12 @@ def validar_gestion_fecha(semestre: int | None, anio: int | None, fecha_inicio: 
     if semestre == 1 and fecha_inicio.month > 6:
         raise HTTPException(
             status_code=400,
-            detail=f"El semestre 1 no coincide con la fecha {fecha_inicio} que está en el segundo semestre"
+            detail=f"El semestre 1 no coincide con la fecha {fecha_inicio.strftime('%d/%m/%Y')} que está en el segundo semestre"
         )
     if semestre == 2 and fecha_inicio.month <= 6:
         raise HTTPException(
             status_code=400,
-            detail=f"El semestre 2 no coincide con la fecha {fecha_inicio} que está en el primer semestre"
+            detail=f"El semestre 2 no coincide con la fecha {fecha_inicio.strftime('%d/%m/%Y')} que está en el primer semestre"
         )
 
 def query_base(db):

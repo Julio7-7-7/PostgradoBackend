@@ -72,6 +72,8 @@ class DetalleProgramaModuloResponse(DetalleProgramaModuloBase):
     edicion: int
     programa_nombre: str
     programa_version_numero: int
+    fecha_inicio_edicion: date | None = None
+    fecha_fin_edicion: date | None = None
     modulo: ModuloResponse
     docente: DocenteResponse | None = None
     modalidad: ModalidadEnum | None = None
