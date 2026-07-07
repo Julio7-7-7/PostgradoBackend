@@ -1,3 +1,4 @@
+from datetime import date
 from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -45,3 +46,11 @@ class DetalleProgramaModulo(Base):
     @property
     def programa_version_numero(self) -> int:
         return self.programa_version_edicion.programa_version.version
+
+    @property
+    def fecha_inicio_edicion(self) -> date | None:
+        return self.programa_version_edicion.fecha_inicio if self.programa_version_edicion else None
+
+    @property
+    def fecha_fin_edicion(self) -> date | None:
+        return self.programa_version_edicion.fecha_fin if self.programa_version_edicion else None
