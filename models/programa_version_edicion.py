@@ -10,7 +10,8 @@ class ProgramaVersionEdicion(Base):
     id_programa_version = Column(Integer, ForeignKey("programas_version.id_programa_version"), nullable=False)
     modalidad = Column(String(50), nullable=False, default="presencial")
     edicion = Column(Integer, nullable=False)
-    gestion = Column(String(10), nullable=False)
+    semestre = Column(Integer, nullable=False)
+    anio = Column(Integer, nullable=False)
     estado = Column(String(20), nullable=False, default="programado")
     fecha_inicio = Column(Date, nullable=True)
     fecha_fin = Column(Date, nullable=True)
@@ -24,3 +25,7 @@ class ProgramaVersionEdicion(Base):
     programa_version = relationship("ProgramaVersion", back_populates="ediciones")
     detalles_modulo = relationship("DetalleProgramaModulo", back_populates="programa_version_edicion")
     detalles_alumno = relationship("DetalleProgramaAlumno", back_populates="programa_version_edicion")
+
+    @property
+    def gestion(self):
+        return f"{self.semestre}-{self.anio}"

@@ -306,6 +306,23 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
                 detail=f"La duración mínima del módulo es de {DURACION_MINIMA_DIAS} días (actual: {diff})"
             )
 
+    # Validar que las fechas del módulo estén dentro del rango de la edición
+    edicion = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion == detalle.id_programa_version_edicion
+    ).first()
+    fecha_ini_mod = fecha_inicio if inicio_changed else detalle.fecha_inicio
+    fecha_fin_mod = fecha_fin if fin_changed else detalle.fecha_fin
+    if edicion and edicion.fecha_inicio and fecha_ini_mod and fecha_ini_mod < edicion.fecha_inicio:
+        raise HTTPException(
+            status_code=400,
+            detail=f"La fecha de inicio del módulo ({fecha_ini_mod}) no puede ser anterior a la fecha de inicio de la edición ({edicion.fecha_inicio})"
+        )
+    if edicion and edicion.fecha_fin and fecha_fin_mod and fecha_fin_mod > edicion.fecha_fin:
+        raise HTTPException(
+            status_code=400,
+            detail=f"La fecha de fin del módulo ({fecha_fin_mod}) no puede ser posterior a la fecha de fin de la edición ({edicion.fecha_fin})"
+        )
+
     if estado_changed or inicio_changed or fin_changed:
         if estado_changed:
             validar_transicion(detalle.estado, estado_solicitado)

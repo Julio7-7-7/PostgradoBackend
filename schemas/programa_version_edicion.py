@@ -14,10 +14,29 @@ class EstadoEdicionEnum(str, Enum):
     reprogramado = "reprogramado"
     finalizado = "finalizado"
 
+class SemestreAnioValidator(BaseModel):
+    semestre: int | None = None
+    anio: int | None = None
+
+    @field_validator("semestre")
+    @classmethod
+    def validar_semestre(cls, v):
+        if v is not None and v not in (1, 2):
+            raise ValueError("El semestre debe ser 1 o 2")
+        return v
+
+    @field_validator("anio")
+    @classmethod
+    def validar_anio(cls, v):
+        if v is not None and (v < 2000 or v > 2100):
+            raise ValueError("El año debe estar entre 2000 y 2100")
+        return v
+
 class ProgramaVersionEdicionBase(BaseModel):
     id_programa_version: int
     modalidad: ModalidadEnum
-    gestion: str | None = None
+    semestre: int | None = None
+    anio: int | None = None
     es_historico: bool = False
     estado: EstadoEdicionEnum = EstadoEdicionEnum.programado
     fecha_inicio: date | None = None
@@ -40,6 +59,20 @@ class ProgramaVersionEdicionBase(BaseModel):
             raise ValueError("El precio no puede ser negativo")
         return v
 
+    @field_validator("semestre")
+    @classmethod
+    def validar_semestre(cls, v):
+        if v is not None and v not in (1, 2):
+            raise ValueError("El semestre debe ser 1 o 2")
+        return v
+
+    @field_validator("anio")
+    @classmethod
+    def validar_anio(cls, v):
+        if v is not None and (v < 2000 or v > 2100):
+            raise ValueError("El año debe estar entre 2000 y 2100")
+        return v
+
     @model_validator(mode="after")
     def validar_fechas(self):
         if self.fecha_inicio and self.fecha_fin:
@@ -59,7 +92,8 @@ class ProgramaVersionEdicionCreate(ProgramaVersionEdicionBase):
 
 class ProgramaVersionEdicionUpdate(BaseModel):
     modalidad: ModalidadEnum | None = None
-    gestion: str | None = None
+    semestre: int | None = None
+    anio: int | None = None
     es_historico: bool | None = None
     fecha_inicio: date | None = None
     fecha_fin: date | None = None
@@ -81,9 +115,24 @@ class ProgramaVersionEdicionUpdate(BaseModel):
             raise ValueError("El precio no puede ser negativo")
         return v
 
+    @field_validator("semestre")
+    @classmethod
+    def validar_semestre(cls, v):
+        if v is not None and v not in (1, 2):
+            raise ValueError("El semestre debe ser 1 o 2")
+        return v
+
+    @field_validator("anio")
+    @classmethod
+    def validar_anio(cls, v):
+        if v is not None and (v < 2000 or v > 2100):
+            raise ValueError("El año debe estar entre 2000 y 2100")
+        return v
+
 class ProgramaVersionEdicionResponse(ProgramaVersionEdicionBase):
     id_programa_version_edicion: int
     edicion: int
+    gestion: str
     programa_version: ProgramaVersionResponse
     modalidad: ModalidadEnum
     created_at: datetime

@@ -15,24 +15,20 @@ router = APIRouter(
     tags=["Programa Version Edicion"]
 )
 
-def calcular_gestion(db: Session, id_programa_version: int) -> str:
+def calcular_semestre_anio(db: Session, id_programa_version: int) -> tuple[int, int]:
     ultima = db.query(ProgramaVersionEdicion).filter(
         ProgramaVersionEdicion.id_programa_version == id_programa_version
     ).order_by(ProgramaVersionEdicion.edicion.desc()).first()
 
-    if ultima and ultima.gestion:
-        partes = ultima.gestion.split("-")
-        if len(partes) == 2:
-            mitad = int(partes[0])
-            anio = int(partes[1])
-            if mitad == 1:
-                return f"2-{anio}"
-            else:
-                return f"1-{anio + 1}"
+    if ultima:
+        if ultima.semestre == 1:
+            return (2, ultima.anio)
+        else:
+            return (1, ultima.anio + 1)
 
     ahora = datetime.now()
-    mitad = 1 if ahora.month <= 6 else 2
-    return f"{mitad}-{ahora.year}"
+    semestre = 1 if ahora.month <= 6 else 2
+    return (semestre, ahora.year)
 
 def validar_cupo(id_programa_version: int, cupo_maximo: int | None, db: Session):
     if cupo_maximo is None:
@@ -111,25 +107,18 @@ def validar_fecha_inicio_unica(db: Session, id_programa_version: int, fecha_inic
             detail=f"Ya existe una edición con fecha de inicio {fecha_inicio} para esta versión"
         )
 
-def validar_gestion_fecha(gestion: str | None, fecha_inicio: date | None, *, es_historico: bool = False):
-    if not gestion or not fecha_inicio or es_historico:
+def validar_gestion_fecha(semestre: int | None, anio: int | None, fecha_inicio: date | None, *, es_historico: bool = False):
+    if not semestre or not anio or not fecha_inicio or es_historico:
         return
-    partes = gestion.split("-")
-    if len(partes) != 2:
-        return
-    try:
-        mitad = int(partes[0])
-    except ValueError:
-        return
-    if mitad == 1 and fecha_inicio.month > 6:
+    if semestre == 1 and fecha_inicio.month > 6:
         raise HTTPException(
             status_code=400,
-            detail=f"La gestión {gestion} corresponde al primer semestre, pero la fecha {fecha_inicio} está en el segundo"
+            detail=f"El semestre 1 no coincide con la fecha {fecha_inicio} que está en el segundo semestre"
         )
-    if mitad == 2 and fecha_inicio.month <= 6:
+    if semestre == 2 and fecha_inicio.month <= 6:
         raise HTTPException(
             status_code=400,
-            detail=f"La gestión {gestion} corresponde al segundo semestre, pero la fecha {fecha_inicio} está en el primero"
+            detail=f"El semestre 2 no coincide con la fecha {fecha_inicio} que está en el primer semestre"
         )
 
 def query_base(db):
@@ -177,10 +166,13 @@ def crear(data: ProgramaVersionEdicionCreate, db: Session = Depends(get_db)):
     validar_fechas(data.fecha_inicio, data.fecha_fin, tipo, es_historico=data.es_historico)
     validar_fecha_inicio_unica(db, data.id_programa_version, data.fecha_inicio, es_historico=data.es_historico)
 
-    gestion = data.gestion if data.gestion else calcular_gestion(db, data.id_programa_version)
-    validar_gestion_fecha(gestion, data.fecha_inicio, es_historico=data.es_historico)
+    semestre = data.semestre if data.semestre else None
+    anio = data.anio if data.anio else None
+    if not semestre or not anio:
+        semestre, anio = calcular_semestre_anio(db, data.id_programa_version)
+    validar_gestion_fecha(semestre, anio, data.fecha_inicio, es_historico=data.es_historico)
 
-    data_dict = data.model_dump(exclude={"gestion", "edicion", "estado"})
+    data_dict = data.model_dump(exclude={"semestre", "anio", "edicion", "estado"})
     if data.edicion:
         num_edicion = data.edicion
         existe = db.query(ProgramaVersionEdicion).filter(
@@ -196,7 +188,8 @@ def crear(data: ProgramaVersionEdicionCreate, db: Session = Depends(get_db)):
     nueva = ProgramaVersionEdicion(
         **data_dict,
         edicion=num_edicion,
-        gestion=gestion,
+        semestre=semestre,
+        anio=anio,
         estado="programado"
     )
     db.add(nueva)
@@ -269,10 +262,11 @@ def editar(id: int, data: ProgramaVersionEdicionUpdate, db: Session = Depends(ge
         if "fecha_inicio" in update_data:
             validar_fecha_inicio_unica(db, pve.id_programa_version, fecha_inicio, excluir_id=id, es_historico=historico)
 
-    if "gestion" in update_data or "fecha_inicio" in update_data:
-        gestion = update_data.get("gestion", pve.gestion)
+    if "semestre" in update_data or "anio" in update_data or "fecha_inicio" in update_data:
+        semestre = update_data.get("semestre", pve.semestre)
+        anio = update_data.get("anio", pve.anio)
         fecha_inicio = update_data.get("fecha_inicio", pve.fecha_inicio)
-        validar_gestion_fecha(gestion, fecha_inicio, es_historico=historico)
+        validar_gestion_fecha(semestre, anio, fecha_inicio, es_historico=historico)
 
     for key, value in update_data.items():
         setattr(pve, key, value)
