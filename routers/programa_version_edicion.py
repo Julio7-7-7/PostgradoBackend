@@ -207,6 +207,13 @@ def crear(data: ProgramaVersionEdicionCreate, db: Session = Depends(get_db)):
         Modulo.estado == "activo"
     ).order_by(Modulo.sigla).all()
 
+    if not modulos:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="No se puede crear la edición porque la versión no tiene módulos activos. Cree al menos un módulo activo primero."
+        )
+
     for orden, modulo in enumerate(modulos, start=1):
         detalle = DetalleProgramaModulo(
             id_programa_version_edicion=nueva.id_programa_version_edicion,
