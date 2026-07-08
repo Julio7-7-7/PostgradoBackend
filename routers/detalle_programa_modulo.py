@@ -376,6 +376,19 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
         if fin_changed:
             detalle.fecha_fin = fecha_fin
 
+    # Re-validar conflictos de docente si cambian las fechas del módulo
+    if inicio_changed or fin_changed:
+        contratacion_activa = db.query(ContratacionDocente).filter(
+            ContratacionDocente.id_detalle_modulo == id,
+            ContratacionDocente.estado != "truncado",
+        ).first()
+        if contratacion_activa:
+            from routers.contrataciones_docente import verificar_disponibilidad
+            db.flush()
+            verificar_disponibilidad(db, contratacion_activa.id_docente, id)
+            contratacion_activa.fecha_inicio = detalle.fecha_inicio
+            contratacion_activa.fecha_fin = detalle.fecha_fin
+
     if data.orden is not None:
         orden_existente = db.query(DetalleProgramaModulo).filter(
             DetalleProgramaModulo.id_programa_version_edicion == detalle.id_programa_version_edicion,
