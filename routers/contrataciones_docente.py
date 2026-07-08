@@ -19,6 +19,56 @@ router = APIRouter(
 )
 
 
+def verificar_disponibilidad(db, id_docente, id_detalle_modulo):
+    detalle = db.query(DetalleProgramaModulo).filter(
+        DetalleProgramaModulo.id_detalle_programa_modulo == id_detalle_modulo
+    ).first()
+    if not detalle:
+        return
+
+    edicion_id = detalle.id_programa_version_edicion
+    nuevo_ini = detalle.fecha_inicio
+    nuevo_fin = detalle.fecha_fin
+
+    activas = db.query(ContratacionDocente).filter(
+        ContratacionDocente.id_docente == id_docente,
+        ContratacionDocente.estado != "truncado",
+    ).all()
+
+    # Regla 1: un módulo a la vez (sin solapamiento de fechas)
+    if nuevo_ini and nuevo_fin:
+        for c in activas:
+            if c.id_detalle_modulo == id_detalle_modulo:
+                continue
+            otro_detalle = db.query(DetalleProgramaModulo).filter(
+                DetalleProgramaModulo.id_detalle_programa_modulo == c.id_detalle_modulo
+            ).first()
+            if not otro_detalle:
+                continue
+            if otro_detalle.fecha_inicio and otro_detalle.fecha_fin:
+                if otro_detalle.fecha_inicio < nuevo_fin and otro_detalle.fecha_fin > nuevo_ini:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="El docente ya tiene una contratación activa en el rango de fechas indicado",
+                    )
+
+    # Regla 2: máximo 2 por edición del programa
+    count_misma_edicion = db.query(ContratacionDocente).join(
+        DetalleProgramaModulo,
+        ContratacionDocente.id_detalle_modulo == DetalleProgramaModulo.id_detalle_programa_modulo,
+    ).filter(
+        ContratacionDocente.id_docente == id_docente,
+        ContratacionDocente.estado != "truncado",
+        ContratacionDocente.id_detalle_modulo != id_detalle_modulo,
+        DetalleProgramaModulo.id_programa_version_edicion == edicion_id,
+    ).count()
+    if count_misma_edicion >= 2:
+        raise HTTPException(
+            status_code=400,
+            detail="El docente ya tiene el máximo de 2 contrataciones en esta edición del programa",
+        )
+
+
 def query_base(db):
     return db.query(ContratacionDocente).options(
         joinedload(ContratacionDocente.docente),
@@ -44,6 +94,8 @@ def crear(data: ContratacionDocenteCreate, db: Session = Depends(get_db)):
             status_code=400,
             detail="Ya existe una contratación activa para este módulo. Trúncala antes de crear una nueva.",
         )
+
+    verificar_disponibilidad(db, data.id_docente, data.id_detalle_modulo)
 
     nuevo = ContratacionDocente(**data.model_dump())
     detalle = db.query(DetalleProgramaModulo).filter(
