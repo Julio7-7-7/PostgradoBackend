@@ -40,8 +40,13 @@ def verificar_disponibilidad(db, id_docente, id_detalle_modulo):
         for c in activas:
             if c.id_detalle_modulo == id_detalle_modulo:
                 continue
-            if c.fecha_inicio and c.fecha_fin:
-                if c.fecha_inicio < nuevo_fin and c.fecha_fin > nuevo_ini:
+            otro_detalle = db.query(DetalleProgramaModulo).filter(
+                DetalleProgramaModulo.id_detalle_programa_modulo == c.id_detalle_modulo
+            ).first()
+            if not otro_detalle:
+                continue
+            if otro_detalle.fecha_inicio and otro_detalle.fecha_fin:
+                if otro_detalle.fecha_inicio < nuevo_fin and otro_detalle.fecha_fin > nuevo_ini:
                     raise HTTPException(
                         status_code=400,
                         detail="El docente ya tiene una contratación activa en el rango de fechas indicado",
