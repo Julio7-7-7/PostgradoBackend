@@ -1,5 +1,5 @@
 from database import SessionLocal
-from models import Rol, Permiso, RolesPermiso, Usuario, Alumno, Docente, Administrativo
+from models import Rol, Permiso, RolesPermiso, ModalidadAcademica, Requisito, Usuario, Alumno, Docente, Administrativo
 from passlib.context import CryptContext
 from datetime import date
 
@@ -12,6 +12,17 @@ def get_or_create(model, defaults=None, **kwargs):
     if instance:
         return instance, False
     instance = model(**kwargs, **(defaults or {}))
+    db.add(instance)
+    db.commit()
+    db.refresh(instance)
+    return instance, True
+
+
+def get_or_create_usuario(email, password_hash, id_rol, activo=True):
+    instance = db.query(Usuario).filter_by(email=email, id_rol=id_rol).first()
+    if instance:
+        return instance, False
+    instance = Usuario(email=email, password_hash=password_hash, id_rol=id_rol, activo=activo)
     db.add(instance)
     db.commit()
     db.refresh(instance)
@@ -120,6 +131,10 @@ def seed():
         "alumno": [
             "dashboard.ver",
             "notas.ver",
+            "alumnos.ver",
+            "ediciones.ver",
+            "modalidades_academicas.ver",
+            "tipos_descuento.ver",
         ],
     }
 
@@ -150,8 +165,47 @@ def seed():
                     db.commit()
         print(f"  ✅ Permisos asignados a: {nombre_rol}")
 
+    modalidad_ed_continua = db.query(ModalidadAcademica).filter(
+        ModalidadAcademica.nombre_modalidad == "Educación Continua"
+    ).first()
+    if not modalidad_ed_continua:
+        modalidad_ed_continua = ModalidadAcademica(
+            nombre_modalidad="Educación Continua",
+            descripcion="Modalidad de educación continua para programas de actualización y especialización",
+            estado="activo",
+        )
+        db.add(modalidad_ed_continua)
+        db.commit()
+        db.refresh(modalidad_ed_continua)
+        print(f"  ✅ Modalidad: {modalidad_ed_continua.nombre_modalidad}")
+    else:
+        print(f"  🔄 Modalidad: {modalidad_ed_continua.nombre_modalidad}")
+
+    requisitos_data = [
+        {"nombre": "Fotocopia de Carnet", "descripcion": "Fotocopia simple del carnet de identidad vigente"},
+        {"nombre": "Boleta de GRL", "descripcion": "Boleta de pago del Gobierno Regional de La Paz"},
+        {"nombre": "Avance Académico de la UAGRM", "descripcion": "Avance académico emitido por la Universidad Autónoma Gabriel René Moreno"},
+    ]
+    for req in requisitos_data:
+        existente = db.query(Requisito).filter(
+            Requisito.nombre == req["nombre"],
+            Requisito.id_modalidad_academica == modalidad_ed_continua.id_modalidad_academica,
+        ).first()
+        if not existente:
+            req_obj = Requisito(
+                nombre=req["nombre"],
+                id_modalidad_academica=modalidad_ed_continua.id_modalidad_academica,
+                descripcion=req["descripcion"],
+                estado="activo",
+            )
+            db.add(req_obj)
+            db.commit()
+            print(f"    ✅ Requisito: {req['nombre']}")
+        else:
+            print(f"    🔄 Requisito: {existente.nombre}")
+
     email = "julio.toledo2030@gmail.com"
-    password = pwd_context.hash("123456")
+    password = pwd_context.hash("adminjt")
 
     roles_usuario = {
         "adm_informatico": {
@@ -199,12 +253,10 @@ def seed():
 
     for nombre_rol, cfg in roles_usuario.items():
         rol = db.query(Rol).filter(Rol.nombre == nombre_rol).first()
-        usuario, created = get_or_create(
-            Usuario,
+        usuario, created = get_or_create_usuario(
             email=email,
             password_hash=password,
             id_rol=rol.id_rol,
-            activo=True,
         )
         if created:
             print(f"  ✅ Usuario: {email} como {nombre_rol}")
