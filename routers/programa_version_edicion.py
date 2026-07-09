@@ -15,7 +15,6 @@ from schemas.auth import UserResponse
 router = APIRouter(
     prefix="/programa-version-edicion",
     tags=["Programa Version Edicion"],
-    dependencies=[Depends(get_current_user)]
 )
 
 def calcular_semestre_anio(db: Session, id_programa_version: int) -> tuple[int, int]:
@@ -232,6 +231,13 @@ def listar(programa_version_id: int | None = None, activas: bool | None = None, 
         query = query.filter(ProgramaVersionEdicion.estado.in_(["programado", "en_curso", "reprogramado"]))
     query = query.order_by(ProgramaVersionEdicion.fecha_inicio.asc().nullslast())
     return query.all()
+
+@router.get("/activas", response_model=list[ProgramaVersionEdicionResponse])
+def listar_activas(db: Session = Depends(get_db)):
+    return query_base(db).filter(
+        ProgramaVersionEdicion.estado.in_(["programado", "en_curso", "reprogramado"])
+    ).order_by(ProgramaVersionEdicion.fecha_inicio.asc().nullslast()).all()
+
 
 @router.get("/{id}", response_model=ProgramaVersionEdicionResponse)
 def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("ediciones.ver"))):

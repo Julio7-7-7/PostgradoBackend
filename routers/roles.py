@@ -5,7 +5,7 @@ from models.rol import Rol
 from models.permiso import Permiso
 from models.roles_permiso import RolesPermiso
 from models.usuario import Usuario
-from schemas.admin import RolCreate, RolUpdate, RolResponse, PermisoResponse
+from schemas.admin import RolCreate, RolUpdate, RolResponse, PermisoResponse, BatchAsignacionesRequest
 from dependencies import get_current_user, require_permiso
 from schemas.auth import UserResponse
 
@@ -158,3 +158,34 @@ def eliminar_rol(
     db.query(RolesPermiso).filter(RolesPermiso.id_rol == id_rol).delete()
     db.delete(rol)
     db.commit()
+
+
+@router.post("/asignaciones/batch", status_code=200)
+def asignar_permisos_batch(
+    data: BatchAsignacionesRequest,
+    db: Session = Depends(get_db),
+    _: UserResponse = Depends(require_permiso("roles.gestionar")),
+):
+    procesados = 0
+    for cambio in data.cambios:
+        rol = db.query(Rol).filter(Rol.id_rol == cambio.id_rol).first()
+        if not rol:
+            continue
+        permiso = db.query(Permiso).filter(Permiso.id_permiso == cambio.id_permiso).first()
+        if not permiso:
+            continue
+
+        existente = db.query(RolesPermiso).filter(
+            RolesPermiso.id_rol == cambio.id_rol,
+            RolesPermiso.id_permiso == cambio.id_permiso,
+        ).first()
+
+        if cambio.asignado and not existente:
+            db.add(RolesPermiso(id_rol=cambio.id_rol, id_permiso=cambio.id_permiso))
+            procesados += 1
+        elif not cambio.asignado and existente:
+            db.delete(existente)
+            procesados += 1
+
+    db.commit()
+    return {"detail": f"{procesados} cambios procesados"}

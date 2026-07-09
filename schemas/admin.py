@@ -58,3 +58,19 @@ class UserAdminCreate(BaseModel):
 
 class UserChangeRol(BaseModel):
     id_rol: int
+
+
+class BatchAsignacion(BaseModel):
+    id_rol: int
+    id_permiso: int
+    asignado: bool
+
+
+class BatchAsignacionesRequest(BaseModel):
+    cambios: list[BatchAsignacion]
+
+
+class AutoInscribirRequest(BaseModel):
+    id_programa_version_edicion: int
+    id_modalidad_academica: int
+    id_tipo_descuento: int | None = None

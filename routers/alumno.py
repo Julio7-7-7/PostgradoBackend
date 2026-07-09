@@ -12,6 +12,7 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)]
 )
 
+
 @router.post("/", response_model=AlumnoResponse, status_code=201)
 def crear(data: AlumnoCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.crear"))):
     if data.ci:
@@ -28,9 +29,56 @@ def crear(data: AlumnoCreate, db: Session = Depends(get_db), current_user: UserR
     db.refresh(nuevo)
     return nuevo
 
+
 @router.get("/", response_model=list[AlumnoResponse])
 def listar(db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.ver"))):
     return db.query(Alumno).all()
+
+
+@router.get("/mi-perfil", response_model=AlumnoResponse)
+def mi_perfil(db: Session = Depends(get_db), current_user: UserResponse = Depends(get_current_user)):
+    if current_user.profile_type != "alumno" or not current_user.id_profile:
+        raise HTTPException(status_code=400, detail="El usuario actual no es un alumno")
+    alumno = db.query(Alumno).filter(Alumno.id_alumno == current_user.id_profile).first()
+    if not alumno:
+        raise HTTPException(status_code=404, detail="Perfil de alumno no encontrado")
+    return alumno
+
+
+@router.patch("/mi-perfil", response_model=AlumnoResponse)
+def actualizar_mi_perfil(data: AlumnoUpdate, db: Session = Depends(get_db), current_user: UserResponse = Depends(get_current_user)):
+    if current_user.profile_type != "alumno" or not current_user.id_profile:
+        raise HTTPException(status_code=400, detail="El usuario actual no es un alumno")
+    alumno = db.query(Alumno).filter(Alumno.id_alumno == current_user.id_profile).first()
+    if not alumno:
+        raise HTTPException(status_code=404, detail="Perfil de alumno no encontrado")
+
+    update_data = data.model_dump(exclude_unset=True)
+    if "ci" in update_data and update_data["ci"]:
+        conflict = db.query(Alumno).filter(
+            Alumno.ci == update_data["ci"], Alumno.id_alumno != alumno.id_alumno
+        ).first()
+        if conflict:
+            raise HTTPException(status_code=400, detail="Ya existe otro alumno con ese CI")
+    if "pasaporte" in update_data and update_data["pasaporte"]:
+        conflict = db.query(Alumno).filter(
+            Alumno.pasaporte == update_data["pasaporte"], Alumno.id_alumno != alumno.id_alumno
+        ).first()
+        if conflict:
+            raise HTTPException(status_code=400, detail="Ya existe otro alumno con ese pasaporte")
+    if "correo" in update_data and update_data["correo"]:
+        conflict = db.query(Alumno).filter(
+            Alumno.correo == update_data["correo"], Alumno.id_alumno != alumno.id_alumno
+        ).first()
+        if conflict:
+            raise HTTPException(status_code=400, detail="Ya existe otro alumno con ese correo")
+
+    for key, value in update_data.items():
+        setattr(alumno, key, value)
+    db.commit()
+    db.refresh(alumno)
+    return alumno
+
 
 @router.get("/{id}", response_model=AlumnoResponse)
 def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.ver"))):
@@ -38,6 +86,7 @@ def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse =
     if not alumno:
         raise HTTPException(status_code=404, detail="No encontrado")
     return alumno
+
 
 @router.patch("/{id}", response_model=AlumnoResponse)
 def editar(id: int, data: AlumnoUpdate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.editar"))):
@@ -58,6 +107,7 @@ def editar(id: int, data: AlumnoUpdate, db: Session = Depends(get_db), current_u
     db.commit()
     db.refresh(alumno)
     return alumno
+
 
 @router.delete("/{id}", status_code=204)
 def eliminar(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.editar"))):
