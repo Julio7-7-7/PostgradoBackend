@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, DateTime
+from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -14,10 +14,12 @@ class Alumno(Base):
     fecha_nacimiento = Column(Date, nullable=True)
     genero = Column(String(20), nullable=True)
     celular = Column(String(20), nullable=True)
-    correo = Column(String(100), nullable=False, unique=True)
+    correo = Column(String(100), nullable=False)
     direccion = Column(String(300), nullable=True)
     estado = Column(String(20), nullable=False, default="activo")
+    id_usuario = Column(Integer, ForeignKey("usuarios.id_usuario"), nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
     detalles_alumno = relationship("DetalleProgramaAlumno", back_populates="alumno")
+    usuario = relationship("Usuario", back_populates="alumno")
