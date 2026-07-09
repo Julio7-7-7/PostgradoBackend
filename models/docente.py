@@ -15,9 +15,11 @@ class Docente(Base):
     grado = Column(String(50), nullable=True)
     titulo = Column(String(100), nullable=True)
     celular = Column(String(20), nullable=True)
-    correo = Column(String(100), nullable=False, unique=True)
+    correo = Column(String(100), nullable=False)
     estado = Column(String(20), nullable=False, default="activo")
+    id_usuario = Column(Integer, ForeignKey("usuarios.id_usuario"), nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
     contrataciones = relationship("ContratacionDocente", back_populates="docente")
+    usuario = relationship("Usuario", back_populates="docente")

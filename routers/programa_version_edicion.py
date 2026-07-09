@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from datetime import date, datetime
 from database import get_db
+from dependencies import get_current_user, require_permiso
 from models.programa_version_edicion import ProgramaVersionEdicion
 from models.programa_version import ProgramaVersion
 from models.programa import Programa
@@ -9,10 +10,11 @@ from models.tipo_programa import TipoPrograma
 from models.modulo import Modulo
 from models.detalle_programa_modulo import DetalleProgramaModulo
 from schemas.programa_version_edicion import ProgramaVersionEdicionCreate, ProgramaVersionEdicionUpdate, ProgramaVersionEdicionResponse
+from schemas.auth import UserResponse
 
 router = APIRouter(
     prefix="/programa-version-edicion",
-    tags=["Programa Version Edicion"]
+    tags=["Programa Version Edicion"],
 )
 
 def calcular_semestre_anio(db: Session, id_programa_version: int) -> tuple[int, int]:
@@ -160,7 +162,7 @@ def actualizar_estado_edicion(id_edicion: int, db: Session) -> bool:
     return False
 
 @router.post("/", response_model=ProgramaVersionEdicionResponse, status_code=201)
-def crear(data: ProgramaVersionEdicionCreate, db: Session = Depends(get_db)):
+def crear(data: ProgramaVersionEdicionCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("ediciones.crear"))):
     validar_cupo(data.id_programa_version, data.cupo_maximo, db)
     tipo = obtener_tipo_programa(db, data.id_programa_version)
     validar_fechas(data.fecha_inicio, data.fecha_fin, tipo, es_historico=data.es_historico)
@@ -221,7 +223,7 @@ def crear(data: ProgramaVersionEdicionCreate, db: Session = Depends(get_db)):
     return nueva
 
 @router.get("/", response_model=list[ProgramaVersionEdicionResponse])
-def listar(programa_version_id: int | None = None, activas: bool | None = None, db: Session = Depends(get_db)):
+def listar(programa_version_id: int | None = None, activas: bool | None = None, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("ediciones.ver"))):
     query = query_base(db)
     if programa_version_id:
         query = query.filter(ProgramaVersionEdicion.id_programa_version == programa_version_id)
@@ -230,8 +232,15 @@ def listar(programa_version_id: int | None = None, activas: bool | None = None, 
     query = query.order_by(ProgramaVersionEdicion.fecha_inicio.asc().nullslast())
     return query.all()
 
+@router.get("/activas", response_model=list[ProgramaVersionEdicionResponse])
+def listar_activas(db: Session = Depends(get_db)):
+    return query_base(db).filter(
+        ProgramaVersionEdicion.estado.in_(["programado", "en_curso", "reprogramado"])
+    ).order_by(ProgramaVersionEdicion.fecha_inicio.asc().nullslast()).all()
+
+
 @router.get("/{id}", response_model=ProgramaVersionEdicionResponse)
-def obtener(id: int, db: Session = Depends(get_db)):
+def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("ediciones.ver"))):
     pve = query_base(db).filter(
         ProgramaVersionEdicion.id_programa_version_edicion == id
     ).first()
@@ -240,7 +249,7 @@ def obtener(id: int, db: Session = Depends(get_db)):
     return pve
 
 @router.patch("/{id}", response_model=ProgramaVersionEdicionResponse)
-def editar(id: int, data: ProgramaVersionEdicionUpdate, db: Session = Depends(get_db)):
+def editar(id: int, data: ProgramaVersionEdicionUpdate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("ediciones.editar"))):
     pve = query_base(db).filter(
         ProgramaVersionEdicion.id_programa_version_edicion == id
     ).first()

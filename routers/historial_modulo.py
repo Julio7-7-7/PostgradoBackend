@@ -1,15 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
+from dependencies import get_current_user, require_permiso
 from models.historial_modulo import HistorialModulo
 from models.detalle_programa_modulo import DetalleProgramaModulo
 from models.programa_version import ProgramaVersion
 from models.programa_version_edicion import ProgramaVersionEdicion
 from schemas.historial_modulo import HistorialModuloResponse, HistorialModuloResponseEnriquecido
+from schemas.auth import UserResponse
 
 router = APIRouter(
     prefix="/historial-modulo",
-    tags=["Historial Modulo"]
+    tags=["Historial Modulo"],
+    dependencies=[Depends(get_current_user)]
 )
 
 
@@ -34,7 +37,7 @@ def _enriquecer(h: HistorialModulo, contexto: dict | None) -> HistorialModuloRes
 
 
 @router.get("/detalle/{id_detalle}", response_model=list[HistorialModuloResponse])
-def listar_por_detalle(id_detalle: int, db: Session = Depends(get_db)):
+def listar_por_detalle(id_detalle: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("historial.ver"))):
     return (
         db.query(HistorialModulo)
         .filter(HistorialModulo.id_detalle_programa_modulo == id_detalle)
@@ -44,7 +47,7 @@ def listar_por_detalle(id_detalle: int, db: Session = Depends(get_db)):
 
 
 @router.get("/detalle/{id_detalle}/enriquecido", response_model=list[HistorialModuloResponseEnriquecido])
-def listar_por_detalle_enriquecido(id_detalle: int, db: Session = Depends(get_db)):
+def listar_por_detalle_enriquecido(id_detalle: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("historial.ver"))):
     historiales = (
         db.query(HistorialModulo)
         .filter(HistorialModulo.id_detalle_programa_modulo == id_detalle)
@@ -66,7 +69,7 @@ def listar_por_detalle_enriquecido(id_detalle: int, db: Session = Depends(get_db
 
 
 @router.get("/edicion/{id_edicion}", response_model=list[HistorialModuloResponseEnriquecido])
-def listar_por_edicion(id_edicion: int, db: Session = Depends(get_db)):
+def listar_por_edicion(id_edicion: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("historial.ver"))):
     detalles = db.query(DetalleProgramaModulo).options(
         joinedload(DetalleProgramaModulo.modulo),
         joinedload(DetalleProgramaModulo.programa_version_edicion)
@@ -96,7 +99,7 @@ def listar_por_edicion(id_edicion: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{id}", response_model=HistorialModuloResponse)
-def obtener(id: int, db: Session = Depends(get_db)):
+def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("historial.ver"))):
     historial = db.query(HistorialModulo).filter(
         HistorialModulo.id_historial == id
     ).first()

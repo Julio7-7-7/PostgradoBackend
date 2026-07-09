@@ -3,19 +3,22 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from database import get_db
+from dependencies import get_current_user, require_permiso
 from models.programa import Programa
 from models.programa_version import ProgramaVersion
 from models.programa_version_edicion import ProgramaVersionEdicion
 from schemas.programa_version import ProgramaVersionCreate, ProgramaVersionUpdate, ProgramaVersionResponse
+from schemas.auth import UserResponse
 from .utils import guardar_foto_base64, eliminar_foto
 
 router = APIRouter(
     prefix="/programas-version",
-    tags=["Programas Version"]
+    tags=["Programas Version"],
+    dependencies=[Depends(get_current_user)]
 )
 
 @router.post("/", response_model=ProgramaVersionResponse, status_code=201)
-def crear(data: ProgramaVersionCreate, db: Session = Depends(get_db)):
+def crear(data: ProgramaVersionCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("programas.crear"))):
     programa = db.query(Programa).filter(Programa.id_programa == data.id_programa).first()
     if not programa:
         raise HTTPException(status_code=404, detail="El programa especificado no existe")
@@ -65,13 +68,13 @@ def _cargar_counts_masivo(versiones, db):
         pv.ediciones_count = count_map.get(pv.id_programa_version, 0)
 
 @router.get("/", response_model=list[ProgramaVersionResponse])
-def listar(db: Session = Depends(get_db)):
+def listar(db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("programas.ver"))):
     versiones = db.query(ProgramaVersion).options(joinedload(ProgramaVersion.programa)).all()
     _cargar_counts_masivo(versiones, db)
     return versiones
 
 @router.get("/{id}", response_model=ProgramaVersionResponse)
-def obtener(id: int, db: Session = Depends(get_db)):
+def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("programas.ver"))):
     pv = db.query(ProgramaVersion).options(joinedload(ProgramaVersion.programa)).filter(
         ProgramaVersion.id_programa_version == id
     ).first()
@@ -81,7 +84,7 @@ def obtener(id: int, db: Session = Depends(get_db)):
     return pv
 
 @router.patch("/{id}", response_model=ProgramaVersionResponse)
-def editar(id: int, data: ProgramaVersionUpdate, db: Session = Depends(get_db)):
+def editar(id: int, data: ProgramaVersionUpdate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("programas.editar"))):
     pv = db.query(ProgramaVersion).options(joinedload(ProgramaVersion.programa)).filter(
         ProgramaVersion.id_programa_version == id
     ).first()

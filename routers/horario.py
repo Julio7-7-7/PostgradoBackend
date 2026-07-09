@@ -2,14 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from datetime import datetime
 from database import get_db
+from dependencies import get_current_user, require_permiso
 from models.horario import Horario
 from models.detalle_programa_modulo import DetalleProgramaModulo
 from models.contratacion_docente import ContratacionDocente
 from schemas.horario import HorarioCreate, HorarioUpdate, HorarioResponse, HorarioListResponse
+from schemas.auth import UserResponse
 
 router = APIRouter(
     prefix="/horarios",
-    tags=["Horarios"]
+    tags=["Horarios"],
+    dependencies=[Depends(get_current_user)]
 )
 
 def query_detail(db):
@@ -71,7 +74,7 @@ def verificar_docente(db: Session, id_detalle: int, dia: str, hora_ini, hora_fin
         )
 
 @router.post("/", response_model=HorarioResponse, status_code=201)
-def crear(data: HorarioCreate, db: Session = Depends(get_db)):
+def crear(data: HorarioCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("horarios.crear"))):
     verificar_solapamiento(db, data.id_detalle_programa_modulo, data.dia, data.hora_ini, data.hora_fin)
     verificar_docente(db, data.id_detalle_programa_modulo, data.dia, data.hora_ini, data.hora_fin)
     nuevo = Horario(**data.model_dump())
@@ -81,21 +84,21 @@ def crear(data: HorarioCreate, db: Session = Depends(get_db)):
     return query_detail(db).filter(Horario.id_horario == nuevo.id_horario).first()
 
 @router.get("/", response_model=list[HorarioListResponse])
-def listar(detalle_id: int | None = None, db: Session = Depends(get_db)):
+def listar(detalle_id: int | None = None, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("horarios.ver"))):
     query = db.query(Horario)
     if detalle_id:
         query = query.filter(Horario.id_detalle_programa_modulo == detalle_id)
     return query.all()
 
 @router.get("/{id}", response_model=HorarioResponse)
-def obtener(id: int, db: Session = Depends(get_db)):
+def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("horarios.ver"))):
     horario = query_detail(db).filter(Horario.id_horario == id).first()
     if not horario:
         raise HTTPException(status_code=404, detail="No encontrado")
     return horario
 
 @router.patch("/{id}", response_model=HorarioResponse)
-def editar(id: int, data: HorarioUpdate, db: Session = Depends(get_db)):
+def editar(id: int, data: HorarioUpdate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("horarios.editar"))):
     horario = query_detail(db).filter(Horario.id_horario == id).first()
     if not horario:
         raise HTTPException(status_code=404, detail="No encontrado")
@@ -111,7 +114,7 @@ def editar(id: int, data: HorarioUpdate, db: Session = Depends(get_db)):
     return query_detail(db).filter(Horario.id_horario == id).first()
 
 @router.patch("/{id}/cancelar", response_model=HorarioResponse)
-def cancelar(id: int, db: Session = Depends(get_db)):
+def cancelar(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("horarios.editar"))):
     horario = query_detail(db).filter(Horario.id_horario == id).first()
     if not horario:
         raise HTTPException(status_code=404, detail="No encontrado")

@@ -1,16 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
+from dependencies import get_current_user, require_permiso
 from models.detalle_programa_alumno import DetalleProgramaAlumno
 from models.modalidad_academica import ModalidadAcademica
 from models.tipo_descuento import TipoDescuento
 from models.control_documentacion import ControlDocumentacion
 from models.requisito import Requisito
 from schemas.detalle_programa_alumno import DetalleProgramaAlumnoCreate, DetalleProgramaAlumnoUpdate, DetalleProgramaAlumnoResponse
+from schemas.admin import AutoInscribirRequest
+from schemas.auth import UserResponse
 
 router = APIRouter(
     prefix="/detalle-programa-alumno",
-    tags=["Detalle Programa Alumno"]
+    tags=["Detalle Programa Alumno"],
+    dependencies=[Depends(get_current_user)]
 )
 
 def generar_control_documentacion(id_detalle: int, id_modalidad_academica: int, db: Session):
@@ -29,7 +33,7 @@ def generar_control_documentacion(id_detalle: int, id_modalidad_academica: int, 
     db.commit()
 
 @router.post("/", response_model=DetalleProgramaAlumnoResponse, status_code=201)
-def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db)):
+def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.crear"))):
     modalidad = db.query(ModalidadAcademica).filter(
         ModalidadAcademica.id_modalidad_academica == data.id_modalidad_academica
     ).first()
@@ -85,12 +89,97 @@ def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db)):
     db.refresh(nuevo)
     return nuevo
 
+@router.get("/mis-inscripciones", response_model=list[DetalleProgramaAlumnoResponse])
+def mis_inscripciones(db: Session = Depends(get_db), current_user: UserResponse = Depends(get_current_user)):
+    if current_user.profile_type != "alumno" or not current_user.id_profile:
+        raise HTTPException(status_code=400, detail="El usuario actual no es un alumno")
+    return db.query(DetalleProgramaAlumno).filter(
+        DetalleProgramaAlumno.id_alumno == current_user.id_profile
+    ).all()
+
+
+@router.post("/auto-inscribir", response_model=DetalleProgramaAlumnoResponse, status_code=201)
+def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), current_user: UserResponse = Depends(get_current_user)):
+    if current_user.profile_type != "alumno" or not current_user.id_profile:
+        raise HTTPException(status_code=400, detail="El usuario actual no es un alumno")
+
+    existente = db.query(DetalleProgramaAlumno).filter(
+        DetalleProgramaAlumno.id_alumno == current_user.id_profile,
+        DetalleProgramaAlumno.id_programa_version_edicion == data.id_programa_version_edicion,
+    ).first()
+    if existente:
+        raise HTTPException(
+            status_code=400,
+            detail="Ya estás postulado a esta edición del programa"
+        )
+
+    modalidad = db.query(ModalidadAcademica).filter(
+        ModalidadAcademica.id_modalidad_academica == data.id_modalidad_academica
+    ).first()
+    if not modalidad:
+        raise HTTPException(status_code=404, detail="Modalidad académica no encontrada")
+    if modalidad.estado != "activo":
+        raise HTTPException(status_code=400, detail="La modalidad académica no está activa")
+
+    if modalidad.uso_unico:
+        usado = db.query(DetalleProgramaAlumno).filter(
+            DetalleProgramaAlumno.id_alumno == current_user.id_profile,
+            DetalleProgramaAlumno.id_modalidad_academica == data.id_modalidad_academica,
+            DetalleProgramaAlumno.estado.notin_(["postulante"])
+        ).first()
+        if usado:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Ya utilizaste la modalidad '{modalidad.nombre_modalidad}' anteriormente"
+            )
+
+    descuento_aplicado = 0.0
+    tipo_descuento = None
+    if data.id_tipo_descuento:
+        tipo_descuento = db.query(TipoDescuento).filter(
+            TipoDescuento.id_tipo_descuento == data.id_tipo_descuento,
+            TipoDescuento.estado == "activo"
+        ).first()
+        if not tipo_descuento:
+            raise HTTPException(status_code=404, detail="Tipo de descuento no encontrado o inactivo")
+        descuento_aplicado = tipo_descuento.porcentaje
+
+    from datetime import date
+    nuevo = DetalleProgramaAlumno(
+        id_programa_version_edicion=data.id_programa_version_edicion,
+        id_alumno=current_user.id_profile,
+        id_modalidad_academica=data.id_modalidad_academica,
+        id_tipo_descuento=data.id_tipo_descuento,
+        descuento_aplicado=descuento_aplicado,
+        estado="postulante",
+        fecha_inscripcion=date.today(),
+    )
+    db.add(nuevo)
+    db.commit()
+    db.refresh(nuevo)
+
+    generar_control_documentacion(nuevo.id_detalle_programa_alumno, data.id_modalidad_academica, db)
+
+    if tipo_descuento and tipo_descuento.requiere_documento and tipo_descuento.id_requisito_extra:
+        control_extra = ControlDocumentacion(
+            id_detalle_programa_alumno=nuevo.id_detalle_programa_alumno,
+            id_requisito=tipo_descuento.id_requisito_extra,
+            estado="pendiente",
+            obligatorio=True,
+        )
+        db.add(control_extra)
+        db.commit()
+
+    db.refresh(nuevo)
+    return nuevo
+
+
 @router.get("/", response_model=list[DetalleProgramaAlumnoResponse])
-def listar(db: Session = Depends(get_db)):
+def listar(db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.ver"))):
     return db.query(DetalleProgramaAlumno).all()
 
 @router.get("/{id}", response_model=DetalleProgramaAlumnoResponse)
-def obtener(id: int, db: Session = Depends(get_db)):
+def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.ver"))):
     detalle = db.query(DetalleProgramaAlumno).filter(
         DetalleProgramaAlumno.id_detalle_programa_alumno == id
     ).first()
@@ -99,7 +188,7 @@ def obtener(id: int, db: Session = Depends(get_db)):
     return detalle
 
 @router.patch("/{id}", response_model=DetalleProgramaAlumnoResponse)
-def editar(id: int, data: DetalleProgramaAlumnoUpdate, db: Session = Depends(get_db)):
+def editar(id: int, data: DetalleProgramaAlumnoUpdate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.editar"))):
     detalle = db.query(DetalleProgramaAlumno).filter(
         DetalleProgramaAlumno.id_detalle_programa_alumno == id
     ).first()
@@ -121,7 +210,7 @@ def editar(id: int, data: DetalleProgramaAlumnoUpdate, db: Session = Depends(get
     return detalle
 
 @router.delete("/{id}", status_code=204)
-def eliminar(id: int, db: Session = Depends(get_db)):
+def eliminar(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.editar"))):
     detalle = db.query(DetalleProgramaAlumno).filter(
         DetalleProgramaAlumno.id_detalle_programa_alumno == id
     ).first()

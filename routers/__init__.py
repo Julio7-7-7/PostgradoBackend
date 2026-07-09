@@ -15,6 +15,10 @@ from routers import historial_modulo
 from routers import tipo_descuento
 from routers import contrataciones_docente
 from routers import documentos_contratacion
+from routers import auth
+from routers import roles
+from routers import permisos
+from routers import usuarios
 
 all_routers = [
     tipo_programa.router,
@@ -34,4 +38,8 @@ all_routers = [
     tipo_descuento.router,
     contrataciones_docente.router,
     documentos_contratacion.router,
+    auth.router,
+    roles.router,
+    permisos.router,
+    usuarios.router,
 ]

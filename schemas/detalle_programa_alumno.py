@@ -3,6 +3,8 @@ from enum import Enum
 from pydantic import BaseModel, ConfigDict, field_validator
 from schemas.alumno import AlumnoResponse
 from schemas.modalidad_academica import ModalidadAcademicaResponse
+from schemas.programa_version_edicion import ProgramaVersionEdicionResponse
+from schemas.tipo_descuento import TipoDescuentoResponse
 
 class EstadoDetalleAlumnoEnum(str, Enum):
     postulante = "postulante"
@@ -43,6 +45,8 @@ class DetalleProgramaAlumnoResponse(DetalleProgramaAlumnoBase):
     id_detalle_programa_alumno: int
     alumno: AlumnoResponse
     modalidad_academica: ModalidadAcademicaResponse
+    programa_version_edicion: ProgramaVersionEdicionResponse | None = None
+    tipo_descuento: TipoDescuentoResponse | None = None
     created_at: datetime
     updated_at: datetime
 

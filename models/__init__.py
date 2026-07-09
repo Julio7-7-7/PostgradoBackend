@@ -15,3 +15,8 @@ from models.historial_modulo import HistorialModulo
 from models.tipo_descuento import TipoDescuento
 from models.contratacion_docente import ContratacionDocente
 from models.documento_contratacion import DocumentoContratacion
+from models.rol import Rol
+from models.permiso import Permiso
+from models.roles_permiso import RolesPermiso
+from models.usuario import Usuario
+from models.administrativo import Administrativo

@@ -2,17 +2,20 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from database import get_db
+from dependencies import get_current_user, require_permiso
 from models.docente import Docente
 from models.contratacion_docente import ContratacionDocente
 from schemas.docente import DocenteCreate, DocenteUpdate, DocenteResponse
+from schemas.auth import UserResponse
 
 router = APIRouter(
     prefix="/docentes",
-    tags=["Docentes"]
+    tags=["Docentes"],
+    dependencies=[Depends(get_current_user)]
 )
 
 @router.post("/", response_model=DocenteResponse, status_code=201)
-def crear(data: DocenteCreate, db: Session = Depends(get_db)):
+def crear(data: DocenteCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("docentes.crear"))):
     existente = db.query(Docente).filter(
         (Docente.ci == data.ci) | (Docente.correo == data.correo)
     ).first()
@@ -33,7 +36,7 @@ def _ids_con_contratos(db: Session) -> set[int]:
     return {r[0] for r in filas}
 
 @router.get("/", response_model=list[DocenteResponse])
-def listar(estado: str | None = None, db: Session = Depends(get_db)):
+def listar(estado: str | None = None, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("docentes.ver"))):
     query = db.query(Docente)
     if estado:
         query = query.filter(Docente.estado == estado)
@@ -47,7 +50,7 @@ def listar(estado: str | None = None, db: Session = Depends(get_db)):
     return respuestas
 
 @router.get("/{id}", response_model=DocenteResponse)
-def obtener(id: int, db: Session = Depends(get_db)):
+def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("docentes.ver"))):
     docente = db.query(Docente).filter(Docente.id_docente == id).first()
     if not docente:
         raise HTTPException(status_code=404, detail="No encontrado")
@@ -59,7 +62,7 @@ def obtener(id: int, db: Session = Depends(get_db)):
     return resp
 
 @router.patch("/{id}", response_model=DocenteResponse)
-def editar(id: int, data: DocenteUpdate, db: Session = Depends(get_db)):
+def editar(id: int, data: DocenteUpdate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("docentes.editar"))):
     docente = db.query(Docente).filter(Docente.id_docente == id).first()
     if not docente:
         raise HTTPException(status_code=404, detail="No encontrado")
@@ -87,7 +90,7 @@ def editar(id: int, data: DocenteUpdate, db: Session = Depends(get_db)):
     return resp
 
 @router.patch("/{id}/cancelar", response_model=DocenteResponse)
-def cancelar(id: int, db: Session = Depends(get_db)):
+def cancelar(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("docentes.editar"))):
     docente = db.query(Docente).filter(Docente.id_docente == id).first()
     if not docente:
         raise HTTPException(status_code=404, detail="No encontrado")
