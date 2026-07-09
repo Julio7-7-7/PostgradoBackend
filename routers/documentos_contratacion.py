@@ -4,17 +4,20 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
+from dependencies import get_current_user, require_permiso
 from models.documento_contratacion import DocumentoContratacion
 from models.contratacion_docente import ContratacionDocente
 from schemas.documentos_contratacion import (
     DocumentoContratacionCreate,
     DocumentoContratacionResponse,
 )
+from schemas.auth import UserResponse
 from routers.utils import guardar_pdf_base64
 
 router = APIRouter(
     prefix="/documentos-contratacion",
     tags=["Documentos Contratacion"],
+    dependencies=[Depends(get_current_user)]
 )
 
 GATILLOS_POR_POSICION = {
@@ -109,7 +112,7 @@ def _crear_o_reemplazar_documento(
 
 
 @router.post("/", response_model=DocumentoContratacionResponse, status_code=201)
-def crear(data: DocumentoContratacionCreate, db: Session = Depends(get_db)):
+def crear(data: DocumentoContratacionCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("contrataciones.crear"))):
     contratacion = db.query(ContratacionDocente).filter(
         ContratacionDocente.id_contratacion == data.id_contratacion
     ).first()
@@ -135,6 +138,7 @@ async def subir_pdf(
     tipo: str = Form(""),
     orden: int | None = Form(None),
     db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(require_permiso("contrataciones.editar")),
 ):
     contratacion = db.query(ContratacionDocente).filter(
         ContratacionDocente.id_contratacion == id_contratacion
@@ -155,7 +159,7 @@ async def subir_pdf(
 
 
 @router.get("/", response_model=list[DocumentoContratacionResponse])
-def listar(contratacion_id: int | None = None, db: Session = Depends(get_db)):
+def listar(contratacion_id: int | None = None, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("contrataciones.ver"))):
     query = query_base(db)
     if contratacion_id:
         query = query.filter(DocumentoContratacion.id_contratacion == contratacion_id)
@@ -164,7 +168,7 @@ def listar(contratacion_id: int | None = None, db: Session = Depends(get_db)):
 
 
 @router.get("/{id}", response_model=DocumentoContratacionResponse)
-def obtener(id: int, db: Session = Depends(get_db)):
+def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("contrataciones.ver"))):
     doc = query_base(db).filter(
         DocumentoContratacion.id_documento == id
     ).first()

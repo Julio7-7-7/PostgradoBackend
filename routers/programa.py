@@ -1,17 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
+from dependencies import get_current_user, require_permiso
 from models.programa import Programa
 from schemas.programa import ProgramaCreate, ProgramaUpdate, ProgramaResponse
+from schemas.auth import UserResponse
 from .utils import guardar_foto_base64, eliminar_foto
 
 router = APIRouter(
     prefix="/programas",
-    tags=["Programas"]
+    tags=["Programas"],
+    dependencies=[Depends(get_current_user)]
 )
 
 @router.post("/", response_model=ProgramaResponse, status_code=201)
-def crear(data: ProgramaCreate, db: Session = Depends(get_db)):
+def crear(data: ProgramaCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("programas.crear"))):
     existente = db.query(Programa).filter(Programa.nombre_programa == data.nombre_programa).first()
     if existente:
         raise HTTPException(status_code=400, detail="Ya existe un programa con ese nombre")
@@ -24,18 +27,18 @@ def crear(data: ProgramaCreate, db: Session = Depends(get_db)):
     return nuevo
 
 @router.get("/", response_model=list[ProgramaResponse])
-def listar(db: Session = Depends(get_db)):
+def listar(db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("programas.ver"))):
     return db.query(Programa).options(joinedload(Programa.tipo_programa)).all()
 
 @router.get("/{id}", response_model=ProgramaResponse)
-def obtener(id: int, db: Session = Depends(get_db)):
+def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("programas.ver"))):
     programa = db.query(Programa).options(joinedload(Programa.tipo_programa)).filter(Programa.id_programa == id).first()
     if not programa:
         raise HTTPException(status_code=404, detail="No encontrado")
     return programa
 
 @router.patch("/{id}", response_model=ProgramaResponse)
-def editar(id: int, data: ProgramaUpdate, db: Session = Depends(get_db)):
+def editar(id: int, data: ProgramaUpdate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("programas.editar"))):
     programa = db.query(Programa).options(joinedload(Programa.tipo_programa)).filter(Programa.id_programa == id).first()
     if not programa:
         raise HTTPException(status_code=404, detail="No encontrado")

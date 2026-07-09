@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, not_
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
+from dependencies import get_current_user, require_permiso
 from models.detalle_programa_modulo import DetalleProgramaModulo
 from models.historial_modulo import HistorialModulo
 from models.contratacion_docente import ContratacionDocente
@@ -12,10 +13,12 @@ from models.programa_version import ProgramaVersion
 from models.programa_version_edicion import ProgramaVersionEdicion
 from schemas.detalle_programa_modulo import DetalleProgramaModuloCreate, DetalleProgramaModuloUpdate, DetalleProgramaModuloResponse, ReordenarRequest
 from schemas.contrataciones_docente import ContratacionDocenteResponse
+from schemas.auth import UserResponse
 
 router = APIRouter(
     prefix="/detalle-programa-modulo",
-    tags=["Detalle Programa Modulo"]
+    tags=["Detalle Programa Modulo"],
+    dependencies=[Depends(get_current_user)]
 )
 
 DURACION_MINIMA_DIAS = 30
@@ -147,7 +150,7 @@ def actualizar_estado_edicion(id_edicion: int, db: Session) -> bool:
     return False
 
 @router.post("/", response_model=DetalleProgramaModuloResponse, status_code=201)
-def crear(data: DetalleProgramaModuloCreate, db: Session = Depends(get_db)):
+def crear(data: DetalleProgramaModuloCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("modulos.crear"))):
     if not db.query(ProgramaVersionEdicion).filter(
         ProgramaVersionEdicion.id_programa_version_edicion == data.id_programa_version_edicion
     ).first():
@@ -173,7 +176,7 @@ def crear(data: DetalleProgramaModuloCreate, db: Session = Depends(get_db)):
     return detalle
 
 @router.post("/reordenar", status_code=200)
-def reordenar(data: ReordenarRequest, db: Session = Depends(get_db)):
+def reordenar(data: ReordenarRequest, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("modulos.editar"))):
     ids_recibidos = {item.id_detalle for item in data.ordenes}
     ordenes_recibidos = [item.orden for item in data.ordenes]
     esperados = set(range(1, len(data.ordenes) + 1))
@@ -218,6 +221,7 @@ def listar(
     programa_id: int | None = None,
     disponible: bool | None = None,
     db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(require_permiso("modulos.ver")),
 ):
     query = query_base(db)
     if edicion_id:
@@ -254,7 +258,7 @@ def listar(
     return resultados
 
 @router.get("/{id}", response_model=DetalleProgramaModuloResponse)
-def obtener(id: int, db: Session = Depends(get_db)):
+def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("modulos.ver"))):
     detalle = query_base(db).filter(
         DetalleProgramaModulo.id_detalle_programa_modulo == id
     ).first()
@@ -269,7 +273,7 @@ def obtener(id: int, db: Session = Depends(get_db)):
     return detalle
 
 @router.patch("/{id}", response_model=DetalleProgramaModuloResponse)
-def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get_db)):
+def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("modulos.editar"))):
     detalle = query_base(db).filter(
         DetalleProgramaModulo.id_detalle_programa_modulo == id
     ).first()

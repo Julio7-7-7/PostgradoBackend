@@ -2,14 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import date
 from database import get_db
+from dependencies import get_current_user, require_permiso
 from models.control_documentacion import ControlDocumentacion
 from models.detalle_programa_alumno import DetalleProgramaAlumno
 from models.requisito import Requisito
 from schemas.control_documentacion import ControlDocumentacionCreate, ControlDocumentacionUpdate, ControlDocumentacionResponse
+from schemas.auth import UserResponse
 
 router = APIRouter(
     prefix="/control-documentacion",
-    tags=["Control Documentacion"]
+    tags=["Control Documentacion"],
+    dependencies=[Depends(get_current_user)]
 )
 
 def verificar_inscripcion_automatica(id_detalle: int, db: Session):
@@ -33,7 +36,7 @@ def verificar_inscripcion_automatica(id_detalle: int, db: Session):
         db.commit()
 
 @router.post("/", response_model=ControlDocumentacionResponse, status_code=201)
-def crear(data: ControlDocumentacionCreate, db: Session = Depends(get_db)):
+def crear(data: ControlDocumentacionCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("documentos.revisar"))):
     existente = db.query(ControlDocumentacion).filter(
         ControlDocumentacion.id_detalle_programa_alumno == data.id_detalle_programa_alumno,
         ControlDocumentacion.id_requisito == data.id_requisito
@@ -47,11 +50,11 @@ def crear(data: ControlDocumentacionCreate, db: Session = Depends(get_db)):
     return nuevo
 
 @router.get("/", response_model=list[ControlDocumentacionResponse])
-def listar(db: Session = Depends(get_db)):
+def listar(db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("documentos.revisar"))):
     return db.query(ControlDocumentacion).all()
 
 @router.get("/{id}", response_model=ControlDocumentacionResponse)
-def obtener(id: int, db: Session = Depends(get_db)):
+def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("documentos.revisar"))):
     control = db.query(ControlDocumentacion).filter(
         ControlDocumentacion.id_control_documentacion == id
     ).first()
@@ -60,13 +63,13 @@ def obtener(id: int, db: Session = Depends(get_db)):
     return control
 
 @router.get("/alumno/{id_detalle}", response_model=list[ControlDocumentacionResponse])
-def listar_por_alumno(id_detalle: int, db: Session = Depends(get_db)):
+def listar_por_alumno(id_detalle: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("documentos.revisar"))):
     return db.query(ControlDocumentacion).filter(
         ControlDocumentacion.id_detalle_programa_alumno == id_detalle
     ).all()
 
 @router.patch("/{id}", response_model=ControlDocumentacionResponse)
-def editar(id: int, data: ControlDocumentacionUpdate, db: Session = Depends(get_db)):
+def editar(id: int, data: ControlDocumentacionUpdate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("documentos.aprobar"))):
     control = db.query(ControlDocumentacion).filter(
         ControlDocumentacion.id_control_documentacion == id
     ).first()

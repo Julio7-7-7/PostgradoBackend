@@ -2,18 +2,21 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 from database import get_db
+from dependencies import get_current_user, require_permiso
 from models.modulo import Modulo
 from models.programa_version_edicion import ProgramaVersionEdicion
 from models.programa_version import ProgramaVersion
 from schemas.modulo import ModuloCreate, ModuloUpdate, ModuloResponse
+from schemas.auth import UserResponse
 
 router = APIRouter(
     prefix="/modulos",
-    tags=["Modulos"]
+    tags=["Modulos"],
+    dependencies=[Depends(get_current_user)]
 )
 
 @router.post("/", response_model=ModuloResponse, status_code=201)
-def crear(data: ModuloCreate, db: Session = Depends(get_db)):
+def crear(data: ModuloCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("modulos.crear"))):
     pv = db.query(ProgramaVersion).filter(
         ProgramaVersion.id_programa_version == data.id_programa_version
     ).first()
@@ -46,21 +49,21 @@ def crear(data: ModuloCreate, db: Session = Depends(get_db)):
         )
 
 @router.get("/", response_model=list[ModuloResponse])
-def listar(programa_version_id: int | None = None, db: Session = Depends(get_db)):
+def listar(programa_version_id: int | None = None, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("modulos.ver"))):
     query = db.query(Modulo).options(joinedload(Modulo.programa_version))
     if programa_version_id:
         query = query.filter(Modulo.id_programa_version == programa_version_id)
     return query.all()
 
 @router.get("/{id}", response_model=ModuloResponse)
-def obtener(id: int, db: Session = Depends(get_db)):
+def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("modulos.ver"))):
     modulo = db.query(Modulo).options(joinedload(Modulo.programa_version)).filter(Modulo.id_modulo == id).first()
     if not modulo:
         raise HTTPException(status_code=404, detail="No encontrado")
     return modulo
 
 @router.patch("/{id}", response_model=ModuloResponse)
-def editar(id: int, data: ModuloUpdate, db: Session = Depends(get_db)):
+def editar(id: int, data: ModuloUpdate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("modulos.editar"))):
     modulo = db.query(Modulo).options(joinedload(Modulo.programa_version)).filter(Modulo.id_modulo == id).first()
     if not modulo:
         raise HTTPException(status_code=404, detail="No encontrado")

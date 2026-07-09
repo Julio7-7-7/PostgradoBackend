@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 from database import get_db
+from dependencies import get_current_user, require_permiso
 from models.contratacion_docente import ContratacionDocente
 from models.docente import Docente
 from models.detalle_programa_modulo import DetalleProgramaModulo
@@ -12,10 +13,12 @@ from schemas.contrataciones_docente import (
     ContratacionDocenteUpdate,
     ContratacionDocenteResponse,
 )
+from schemas.auth import UserResponse
 
 router = APIRouter(
     prefix="/contratacion-docente",
     tags=["Contratacion Docente"],
+    dependencies=[Depends(get_current_user)]
 )
 
 
@@ -77,7 +80,7 @@ def query_base(db):
 
 
 @router.post("/", response_model=ContratacionDocenteResponse, status_code=201)
-def crear(data: ContratacionDocenteCreate, db: Session = Depends(get_db)):
+def crear(data: ContratacionDocenteCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("contrataciones.crear"))):
     if not db.query(Docente).filter(Docente.id_docente == data.id_docente).first():
         raise HTTPException(status_code=400, detail="El docente especificado no existe")
     if not db.query(DetalleProgramaModulo).filter(
@@ -120,6 +123,7 @@ def listar(
     q: str | None = None,
     programa_id: int | None = None,
     db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(require_permiso("contrataciones.ver")),
 ):
     query = query_base(db)
     if docente_id:
@@ -147,7 +151,7 @@ def listar(
 
 
 @router.get("/{id}", response_model=ContratacionDocenteResponse)
-def obtener(id: int, db: Session = Depends(get_db)):
+def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("contrataciones.ver"))):
     contratacion = query_base(db).filter(
         ContratacionDocente.id_contratacion == id
     ).first()
@@ -157,7 +161,7 @@ def obtener(id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{id}", response_model=ContratacionDocenteResponse)
-def editar(id: int, data: ContratacionDocenteUpdate, db: Session = Depends(get_db)):
+def editar(id: int, data: ContratacionDocenteUpdate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("contrataciones.editar"))):
     contratacion = query_base(db).filter(
         ContratacionDocente.id_contratacion == id
     ).first()
@@ -175,7 +179,7 @@ def editar(id: int, data: ContratacionDocenteUpdate, db: Session = Depends(get_d
 
 
 @router.patch("/{id}/truncar", response_model=ContratacionDocenteResponse)
-def truncar(id: int, db: Session = Depends(get_db)):
+def truncar(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("contrataciones.editar"))):
     contratacion = query_base(db).filter(
         ContratacionDocente.id_contratacion == id
     ).first()

@@ -1,16 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
+from dependencies import get_current_user, require_permiso
 from models.detalle_programa_alumno import DetalleProgramaAlumno
 from models.modalidad_academica import ModalidadAcademica
 from models.tipo_descuento import TipoDescuento
 from models.control_documentacion import ControlDocumentacion
 from models.requisito import Requisito
 from schemas.detalle_programa_alumno import DetalleProgramaAlumnoCreate, DetalleProgramaAlumnoUpdate, DetalleProgramaAlumnoResponse
+from schemas.auth import UserResponse
 
 router = APIRouter(
     prefix="/detalle-programa-alumno",
-    tags=["Detalle Programa Alumno"]
+    tags=["Detalle Programa Alumno"],
+    dependencies=[Depends(get_current_user)]
 )
 
 def generar_control_documentacion(id_detalle: int, id_modalidad_academica: int, db: Session):
@@ -29,7 +32,7 @@ def generar_control_documentacion(id_detalle: int, id_modalidad_academica: int, 
     db.commit()
 
 @router.post("/", response_model=DetalleProgramaAlumnoResponse, status_code=201)
-def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db)):
+def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.crear"))):
     modalidad = db.query(ModalidadAcademica).filter(
         ModalidadAcademica.id_modalidad_academica == data.id_modalidad_academica
     ).first()
@@ -86,11 +89,11 @@ def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db)):
     return nuevo
 
 @router.get("/", response_model=list[DetalleProgramaAlumnoResponse])
-def listar(db: Session = Depends(get_db)):
+def listar(db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.ver"))):
     return db.query(DetalleProgramaAlumno).all()
 
 @router.get("/{id}", response_model=DetalleProgramaAlumnoResponse)
-def obtener(id: int, db: Session = Depends(get_db)):
+def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.ver"))):
     detalle = db.query(DetalleProgramaAlumno).filter(
         DetalleProgramaAlumno.id_detalle_programa_alumno == id
     ).first()
@@ -99,7 +102,7 @@ def obtener(id: int, db: Session = Depends(get_db)):
     return detalle
 
 @router.patch("/{id}", response_model=DetalleProgramaAlumnoResponse)
-def editar(id: int, data: DetalleProgramaAlumnoUpdate, db: Session = Depends(get_db)):
+def editar(id: int, data: DetalleProgramaAlumnoUpdate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.editar"))):
     detalle = db.query(DetalleProgramaAlumno).filter(
         DetalleProgramaAlumno.id_detalle_programa_alumno == id
     ).first()
@@ -121,7 +124,7 @@ def editar(id: int, data: DetalleProgramaAlumnoUpdate, db: Session = Depends(get
     return detalle
 
 @router.delete("/{id}", status_code=204)
-def eliminar(id: int, db: Session = Depends(get_db)):
+def eliminar(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.editar"))):
     detalle = db.query(DetalleProgramaAlumno).filter(
         DetalleProgramaAlumno.id_detalle_programa_alumno == id
     ).first()
