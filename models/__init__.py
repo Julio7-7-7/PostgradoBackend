@@ -19,4 +19,5 @@ from models.rol import Rol
 from models.permiso import Permiso
 from models.roles_permiso import RolesPermiso
 from models.usuario import Usuario
+from models.usuario_rol import UsuarioRol
 from models.administrativo import Administrativo

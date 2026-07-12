@@ -37,8 +37,8 @@ class UserAdminResponse(BaseModel):
     id_usuario: int
     email: str
     activo: bool
-    rol: str
-    id_rol: int
+    roles: list[str]
+    id_roles: list[int]
     profile_type: str | None = None
     profile_nombre: str | None = None
     created_at: datetime
@@ -49,11 +49,15 @@ class UserAdminResponse(BaseModel):
 class UserAdminCreate(BaseModel):
     email: str
     password: str
-    id_rol: int
+    roles: list[int]
     ci: str
     nombre: str
     apellido: str
     celular: str | None = None
+
+
+class UserUpdateRoles(BaseModel):
+    roles: list[int]
 
 
 class UserChangeRol(BaseModel):
