@@ -5,6 +5,7 @@ from models.rol import Rol
 from models.permiso import Permiso
 from models.roles_permiso import RolesPermiso
 from models.usuario import Usuario
+from models.usuario_rol import UsuarioRol
 from schemas.admin import RolCreate, RolUpdate, RolResponse, PermisoResponse, BatchAsignacionesRequest
 from dependencies import get_current_user, require_permiso
 from schemas.auth import UserResponse
@@ -149,7 +150,7 @@ def eliminar_rol(
     rol = db.query(Rol).filter(Rol.id_rol == id_rol).first()
     if not rol:
         raise HTTPException(status_code=404, detail="Rol no encontrado")
-    tiene_usuarios = db.query(Usuario).filter(Usuario.id_rol == id_rol).first()
+    tiene_usuarios = db.query(UsuarioRol).filter(UsuarioRol.id_rol == id_rol).first()
     if tiene_usuarios:
         raise HTTPException(
             status_code=400,

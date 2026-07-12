@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from enum import Enum
 
@@ -16,31 +16,19 @@ class RolEnum(str, Enum):
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class SelectRolRequest(BaseModel):
+    id_usuario: int
     id_rol: int
 
 
-class RegisterRequest(BaseModel):
-    email: str
-    password: str
+class RolInfo(BaseModel):
     id_rol: int
-    ci: str
     nombre: str
-    apellido: str
-    celular: str | None = None
+    descripcion: str | None = None
 
-    @field_validator("email")
-    @classmethod
-    def validar_email(cls, v):
-        if "@" not in v:
-            raise ValueError("Correo inválido")
-        return v.strip().lower()
-
-    @field_validator("password")
-    @classmethod
-    def validar_password(cls, v):
-        if len(v) < 6:
-            raise ValueError("La contraseña debe tener al menos 6 caracteres")
-        return v
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PermisoInfo(BaseModel):
@@ -56,9 +44,11 @@ class UserResponse(BaseModel):
     email: str
     activo: bool
     rol: str
+    id_rol: int
     id_profile: int | None = None
     profile_type: str | None = None
     permisos: list[PermisoInfo] = []
+    roles: list[RolInfo] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -69,12 +59,19 @@ class TokenResponse(BaseModel):
     user: UserResponse
 
 
+class LoginStep1Response(BaseModel):
+    id_usuario: int
+    email: str
+    roles: list[RolInfo]
+
+
 class MeResponse(BaseModel):
     id_usuario: int
     email: str
     activo: bool
     rol: str
     permisos: list[PermisoInfo]
+    roles: list[RolInfo]
     profile: dict | None = None
 
     model_config = ConfigDict(from_attributes=True)

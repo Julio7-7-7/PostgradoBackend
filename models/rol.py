@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
 
+
 class Rol(Base):
     __tablename__ = "roles"
 
@@ -12,5 +13,5 @@ class Rol(Base):
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    usuarios = relationship("Usuario", back_populates="rol")
+    usuario_roles = relationship("UsuarioRol", back_populates="rol")
     roles_permisos = relationship("RolesPermiso", back_populates="rol", cascade="all, delete-orphan")

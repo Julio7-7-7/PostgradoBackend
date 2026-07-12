@@ -1,5 +1,5 @@
 from database import SessionLocal
-from models import Rol, Permiso, RolesPermiso, ModalidadAcademica, Requisito, Usuario, Alumno, Docente, Administrativo
+from models import Rol, Permiso, RolesPermiso, ModalidadAcademica, Requisito, Usuario, UsuarioRol, Alumno, Docente, Administrativo
 from passlib.context import CryptContext
 from datetime import date
 
@@ -12,17 +12,6 @@ def get_or_create(model, defaults=None, **kwargs):
     if instance:
         return instance, False
     instance = model(**kwargs, **(defaults or {}))
-    db.add(instance)
-    db.commit()
-    db.refresh(instance)
-    return instance, True
-
-
-def get_or_create_usuario(email, password_hash, id_rol, activo=True):
-    instance = db.query(Usuario).filter_by(email=email, id_rol=id_rol).first()
-    if instance:
-        return instance, False
-    instance = Usuario(email=email, password_hash=password_hash, id_rol=id_rol, activo=activo)
     db.add(instance)
     db.commit()
     db.refresh(instance)
@@ -126,6 +115,7 @@ def seed():
             "horarios.ver",
             "notas.subir", "notas.ver",
             "alumnos.ver",
+            "docentes.ver",
         ],
 
         "alumno": [
@@ -207,6 +197,16 @@ def seed():
     email = "julio.toledo2030@gmail.com"
     password = pwd_context.hash("adminjt")
 
+    usuario = db.query(Usuario).filter(Usuario.email == email).first()
+    if not usuario:
+        usuario = Usuario(email=email, password_hash=password, activo=True)
+        db.add(usuario)
+        db.commit()
+        db.refresh(usuario)
+        print(f"  ✅ Usuario: {email}")
+    else:
+        print(f"  🔄 Usuario ya existe: {email}")
+
     roles_usuario = {
         "adm_informatico": {
             "crear_perfil": lambda usr: get_or_create(
@@ -228,7 +228,7 @@ def seed():
                 apellido="Toledo",
                 genero="masculino",
                 extension="LP",
-                grado="Licenciado",
+                grado="Lic.",
                 titulo="Ingeniero de Sistemas",
                 celular="70000000",
                 correo=email,
@@ -253,15 +253,16 @@ def seed():
 
     for nombre_rol, cfg in roles_usuario.items():
         rol = db.query(Rol).filter(Rol.nombre == nombre_rol).first()
-        usuario, created = get_or_create_usuario(
-            email=email,
-            password_hash=password,
-            id_rol=rol.id_rol,
-        )
-        if created:
-            print(f"  ✅ Usuario: {email} como {nombre_rol}")
+        usuario_rol = db.query(UsuarioRol).filter(
+            UsuarioRol.id_usuario == usuario.id_usuario,
+            UsuarioRol.id_rol == rol.id_rol,
+        ).first()
+        if not usuario_rol:
+            db.add(UsuarioRol(id_usuario=usuario.id_usuario, id_rol=rol.id_rol, rol_activo=(nombre_rol == "adm_informatico")))
+            db.commit()
+            print(f"  ✅ Rol asignado: {nombre_rol}")
         else:
-            print(f"  🔄 Usuario ya existe: {email} como {nombre_rol}")
+            print(f"  🔄 Rol ya asignado: {nombre_rol}")
 
         cfg["crear_perfil"](usuario)
         print(f"  ✅ Perfil creado: {nombre_rol}")

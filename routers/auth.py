@@ -2,26 +2,29 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import get_db
 from models.usuario import Usuario
+from models.usuario_rol import UsuarioRol
 from models.rol import Rol
 from models.alumno import Alumno
 from models.docente import Docente
 from models.administrativo import Administrativo
 from schemas.auth import (
-    LoginRequest, RegisterRequest, TokenResponse, UserResponse, MeResponse, PermisoInfo
+    LoginRequest, SelectRolRequest, TokenResponse, UserResponse,
+    MeResponse, LoginStep1Response, RolInfo
 )
-from dependencies import create_access_token, get_current_user, _obtener_permisos, _obtener_profile_info
+from dependencies import (
+    create_access_token, get_current_user, _obtener_permisos,
+    _obtener_profile_info, _obtener_roles_usuario
+)
 from passlib.context import CryptContext
-from datetime import date
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=LoginStep1Response)
 def login(data: LoginRequest, db: Session = Depends(get_db)):
     usuario = db.query(Usuario).filter(
         Usuario.email == data.email.strip().lower(),
-        Usuario.id_rol == data.id_rol,
     ).first()
 
     if not usuario or not pwd_context.verify(data.password, usuario.password_hash):
@@ -36,94 +39,62 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
             detail="Usuario inactivo",
         )
 
-    permisos = _obtener_permisos(db, usuario.id_rol)
-    id_profile, profile_type = _obtener_profile_info(db, usuario)
+    roles = _obtener_roles_usuario(db, usuario.id_usuario)
+    if not roles:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Usuario sin roles asignados",
+        )
 
-    user_resp = UserResponse(
+    return LoginStep1Response(
         id_usuario=usuario.id_usuario,
         email=usuario.email,
-        activo=usuario.activo,
-        rol=usuario.rol.nombre,
-        id_profile=id_profile,
-        profile_type=profile_type,
-        permisos=permisos,
+        roles=roles,
     )
 
-    token = create_access_token({"id_usuario": usuario.id_usuario, "id_rol": usuario.id_rol})
-    return TokenResponse(access_token=token, user=user_resp)
 
-
-@router.post("/register", response_model=TokenResponse, status_code=201)
-def register(data: RegisterRequest, db: Session = Depends(get_db)):
-    rol = db.query(Rol).filter(Rol.id_rol == data.id_rol).first()
-    if not rol:
-        raise HTTPException(status_code=404, detail="Rol no encontrado")
-
-    existing = db.query(Usuario).filter(
-        Usuario.email == data.email,
-        Usuario.id_rol == data.id_rol,
+@router.post("/seleccionar-rol", response_model=TokenResponse)
+def seleccionar_rol(data: SelectRolRequest, db: Session = Depends(get_db)):
+    usuario_rol = db.query(UsuarioRol).filter(
+        UsuarioRol.id_usuario == data.id_usuario,
+        UsuarioRol.id_rol == data.id_rol,
     ).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Ya existe un usuario con ese email y rol")
 
-    usuario = Usuario(
-        email=data.email,
-        password_hash=pwd_context.hash(data.password),
-        id_rol=data.id_rol,
-        activo=True,
-    )
-    db.add(usuario)
-    db.commit()
-    db.refresh(usuario)
-
-    if rol.nombre == "alumno":
-        alumno = Alumno(
-            ci=data.ci,
-            nombre=data.nombre,
-            apellido=data.apellido,
-            celular=data.celular,
-            correo=data.email,
-            id_usuario=usuario.id_usuario,
+    if not usuario_rol:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Rol no válido para este usuario",
         )
-        db.add(alumno)
-    elif rol.nombre == "docente":
-        docente = Docente(
-            ci=data.ci,
-            nombre=data.nombre,
-            apellido=data.apellido,
-            celular=data.celular,
-            correo=data.email,
-            id_usuario=usuario.id_usuario,
-        )
-        db.add(docente)
-    else:
-        admin = Administrativo(
-            ci=data.ci,
-            nombre=data.nombre,
-            apellido=data.apellido,
-            celular=data.celular,
-            correo=data.email,
-            cargo=rol.nombre,
-            id_usuario=usuario.id_usuario,
-        )
-        db.add(admin)
 
-    db.commit()
+    usuario = db.query(Usuario).filter(
+        Usuario.id_usuario == data.id_usuario,
+        Usuario.activo == True,
+    ).first()
 
-    permisos = _obtener_permisos(db, usuario.id_rol)
-    id_profile, profile_type = _obtener_profile_info(db, usuario)
+    if not usuario:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Usuario no encontrado o inactivo",
+        )
+
+    permisos = _obtener_permisos(db, data.id_rol)
+    id_profile, profile_type = _obtener_profile_info(db, usuario, usuario_rol.rol.nombre)
+    roles_disponibles = _obtener_roles_usuario(db, usuario.id_usuario)
+    rol = db.query(Rol).filter(Rol.id_rol == data.id_rol).first()
 
     user_resp = UserResponse(
         id_usuario=usuario.id_usuario,
         email=usuario.email,
         activo=usuario.activo,
         rol=rol.nombre,
+        id_rol=rol.id_rol,
         id_profile=id_profile,
         profile_type=profile_type,
         permisos=permisos,
+        roles=roles_disponibles,
     )
 
-    token = create_access_token({"id_usuario": usuario.id_usuario, "id_rol": usuario.id_rol})
+    token = create_access_token({"id_usuario": usuario.id_usuario, "id_rol": data.id_rol})
     return TokenResponse(access_token=token, user=user_resp)
 
 
@@ -177,5 +148,6 @@ def me(current_user: UserResponse = Depends(get_current_user), db: Session = Dep
         activo=current_user.activo,
         rol=current_user.rol,
         permisos=current_user.permisos,
+        roles=current_user.roles,
         profile=profile,
     )

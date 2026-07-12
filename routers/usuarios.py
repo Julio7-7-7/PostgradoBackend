@@ -2,13 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import get_db
 from models.usuario import Usuario
+from models.usuario_rol import UsuarioRol
 from models.rol import Rol
 from models.alumno import Alumno
 from models.docente import Docente
 from models.administrativo import Administrativo
-from schemas.admin import UserAdminResponse, UserAdminCreate, UserChangeRol
-from dependencies import get_current_user, require_permiso, _obtener_permisos, _obtener_profile_info
-from schemas.auth import UserResponse, TokenResponse
+from schemas.admin import UserAdminResponse, UserAdminCreate, UserUpdateRoles
+from dependencies import get_current_user, require_permiso
+from schemas.auth import UserResponse
 from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -25,6 +26,12 @@ def _profile_info(usuario: Usuario) -> tuple[str | None, str | None]:
     return None, None
 
 
+def _roles_info(usuario: Usuario) -> tuple[list[str], list[int]]:
+    nombres = [ur.rol.nombre for ur in usuario.usuario_roles if ur.rol]
+    ids = [ur.rol.id_rol for ur in usuario.usuario_roles if ur.rol]
+    return nombres, ids
+
+
 @router.get("", response_model=list[UserAdminResponse])
 def listar_usuarios(
     db: Session = Depends(get_db),
@@ -34,12 +41,13 @@ def listar_usuarios(
     result = []
     for u in usuarios:
         profile_type, profile_nombre = _profile_info(u)
+        roles_nombres, roles_ids = _roles_info(u)
         result.append(UserAdminResponse(
             id_usuario=u.id_usuario,
             email=u.email,
             activo=u.activo,
-            rol=u.rol.nombre,
-            id_rol=u.id_rol,
+            roles=roles_nombres,
+            id_roles=roles_ids,
             profile_type=profile_type,
             profile_nombre=profile_nombre,
             created_at=u.created_at,
@@ -57,108 +65,105 @@ def obtener_usuario(
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     profile_type, profile_nombre = _profile_info(usuario)
+    roles_nombres, roles_ids = _roles_info(usuario)
     return UserAdminResponse(
         id_usuario=usuario.id_usuario,
         email=usuario.email,
         activo=usuario.activo,
-        rol=usuario.rol.nombre,
-        id_rol=usuario.id_rol,
+        roles=roles_nombres,
+        id_roles=roles_ids,
         profile_type=profile_type,
         profile_nombre=profile_nombre,
         created_at=usuario.created_at,
     )
 
 
-@router.post("", response_model=TokenResponse, status_code=201)
+@router.post("", response_model=UserAdminResponse, status_code=201)
 def crear_usuario(
     data: UserAdminCreate,
     db: Session = Depends(get_db),
     _: UserResponse = Depends(require_permiso("usuarios.gestionar")),
 ):
-    rol = db.query(Rol).filter(Rol.id_rol == data.id_rol).first()
-    if not rol:
-        raise HTTPException(status_code=404, detail="Rol no encontrado")
-
-    existing = db.query(Usuario).filter(
-        Usuario.email == data.email,
-        Usuario.id_rol == data.id_rol,
-    ).first()
+    existing = db.query(Usuario).filter(Usuario.email == data.email.strip().lower()).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Ya existe un usuario con ese email y rol")
+        raise HTTPException(status_code=400, detail="Ya existe un usuario con ese email")
 
     usuario = Usuario(
         email=data.email.strip().lower(),
         password_hash=pwd_context.hash(data.password),
-        id_rol=data.id_rol,
         activo=True,
     )
     db.add(usuario)
     db.commit()
     db.refresh(usuario)
 
-    if rol.nombre == "alumno":
-        alumno = Alumno(
-            ci=data.ci, nombre=data.nombre, apellido=data.apellido,
-            celular=data.celular, correo=data.email, id_usuario=usuario.id_usuario,
-        )
-        db.add(alumno)
-    elif rol.nombre == "docente":
-        docente = Docente(
-            ci=data.ci, nombre=data.nombre, apellido=data.apellido,
-            celular=data.celular, correo=data.email, id_usuario=usuario.id_usuario,
-        )
-        db.add(docente)
-    else:
-        admin = Administrativo(
-            ci=data.ci, nombre=data.nombre, apellido=data.apellido,
-            celular=data.celular, correo=data.email,
-            cargo=rol.nombre, id_usuario=usuario.id_usuario,
-        )
-        db.add(admin)
-
+    for id_rol in data.roles:
+        rol = db.query(Rol).filter(Rol.id_rol == id_rol).first()
+        if not rol:
+            raise HTTPException(status_code=400, detail=f"Rol {id_rol} no encontrado")
+        db.add(UsuarioRol(id_usuario=usuario.id_usuario, id_rol=id_rol))
     db.commit()
 
-    permisos = _obtener_permisos(db, usuario.id_rol)
-    id_profile, profile_type = _obtener_profile_info(db, usuario)
+    perfil_creado = False
+    for id_rol in data.roles:
+        rol = db.query(Rol).filter(Rol.id_rol == id_rol).first()
+        if rol.nombre == "alumno" and not perfil_creado:
+            db.add(Alumno(
+                ci=data.ci, nombre=data.nombre, apellido=data.apellido,
+                celular=data.celular, correo=data.email, id_usuario=usuario.id_usuario,
+            ))
+            perfil_creado = True
+        elif rol.nombre == "docente" and not perfil_creado:
+            db.add(Docente(
+                ci=data.ci, nombre=data.nombre, apellido=data.apellido,
+                celular=data.celular, correo=data.email, id_usuario=usuario.id_usuario,
+            ))
+            perfil_creado = True
+        elif not perfil_creado:
+            db.add(Administrativo(
+                ci=data.ci, nombre=data.nombre, apellido=data.apellido,
+                celular=data.celular, correo=data.email,
+                cargo=rol.nombre, id_usuario=usuario.id_usuario,
+            ))
+            perfil_creado = True
+    db.commit()
+    db.refresh(usuario)
 
-    from dependencies import create_access_token
-    token = create_access_token({"id_usuario": usuario.id_usuario, "id_rol": usuario.id_rol})
-
-    user_resp = UserResponse(
+    profile_type, profile_nombre = _profile_info(usuario)
+    roles_nombres, roles_ids = _roles_info(usuario)
+    return UserAdminResponse(
         id_usuario=usuario.id_usuario,
         email=usuario.email,
         activo=usuario.activo,
-        rol=rol.nombre,
-        id_profile=id_profile,
+        roles=roles_nombres,
+        id_roles=roles_ids,
         profile_type=profile_type,
-        permisos=permisos,
+        profile_nombre=profile_nombre,
+        created_at=usuario.created_at,
     )
-    return TokenResponse(access_token=token, user=user_resp)
 
 
-@router.put("/{id_usuario}/rol")
-def cambiar_rol_usuario(
+@router.put("/{id_usuario}/roles")
+def actualizar_roles_usuario(
     id_usuario: int,
-    data: UserChangeRol,
+    data: UserUpdateRoles,
     db: Session = Depends(get_db),
     _: UserResponse = Depends(require_permiso("usuarios.gestionar")),
 ):
     usuario = db.query(Usuario).filter(Usuario.id_usuario == id_usuario).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    rol = db.query(Rol).filter(Rol.id_rol == data.id_rol).first()
-    if not rol:
-        raise HTTPException(status_code=404, detail="Rol no encontrado")
-    conflict = db.query(Usuario).filter(
-        Usuario.email == usuario.email,
-        Usuario.id_rol == data.id_rol,
-        Usuario.id_usuario != id_usuario,
-    ).first()
-    if conflict:
-        raise HTTPException(status_code=400, detail="Ya existe otro usuario con ese email y rol")
-    usuario.id_rol = data.id_rol
+
+    db.query(UsuarioRol).filter(UsuarioRol.id_usuario == id_usuario).delete()
+
+    for id_rol in data.roles:
+        rol = db.query(Rol).filter(Rol.id_rol == id_rol).first()
+        if not rol:
+            raise HTTPException(status_code=400, detail=f"Rol {id_rol} no encontrado")
+        db.add(UsuarioRol(id_usuario=id_usuario, id_rol=id_rol))
+
     db.commit()
-    return {"detail": "Rol actualizado"}
+    return {"detail": "Roles actualizados"}
 
 
 @router.put("/{id_usuario}/activo")
