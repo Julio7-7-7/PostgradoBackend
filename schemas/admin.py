@@ -60,10 +60,6 @@ class UserUpdateRoles(BaseModel):
     roles: list[int]
 
 
-class UserChangeRol(BaseModel):
-    id_rol: int
-
-
 class BatchAsignacion(BaseModel):
     id_rol: int
     id_permiso: int

@@ -19,6 +19,7 @@ class LoginRequest(BaseModel):
 
 
 class SelectRolRequest(BaseModel):
+    id_usuario: int
     id_rol: int
 
 

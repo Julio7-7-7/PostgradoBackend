@@ -56,17 +56,18 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 @router.post("/seleccionar-rol", response_model=TokenResponse)
 def seleccionar_rol(data: SelectRolRequest, db: Session = Depends(get_db)):
     usuario_rol = db.query(UsuarioRol).filter(
+        UsuarioRol.id_usuario == data.id_usuario,
         UsuarioRol.id_rol == data.id_rol,
     ).first()
 
     if not usuario_rol:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Rol no válido",
+            detail="Rol no válido para este usuario",
         )
 
     usuario = db.query(Usuario).filter(
-        Usuario.id_usuario == usuario_rol.id_usuario,
+        Usuario.id_usuario == data.id_usuario,
         Usuario.activo == True,
     ).first()
 
@@ -77,7 +78,7 @@ def seleccionar_rol(data: SelectRolRequest, db: Session = Depends(get_db)):
         )
 
     permisos = _obtener_permisos(db, data.id_rol)
-    id_profile, profile_type = _obtener_profile_info(db, usuario)
+    id_profile, profile_type = _obtener_profile_info(db, usuario, usuario_rol.rol.nombre)
     roles_disponibles = _obtener_roles_usuario(db, usuario.id_usuario)
     rol = db.query(Rol).filter(Rol.id_rol == data.id_rol).first()
 

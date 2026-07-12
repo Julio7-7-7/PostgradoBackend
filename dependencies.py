@@ -56,7 +56,7 @@ def get_current_user(
     rol = db.query(Rol).filter(Rol.id_rol == id_rol).first()
 
     permisos = _obtener_permisos(db, id_rol)
-    id_profile, profile_type = _obtener_profile_info(db, usuario)
+    id_profile, profile_type = _obtener_profile_info(db, usuario, rol.nombre)
 
     roles_disponibles = _obtener_roles_usuario(db, id_usuario)
 
@@ -105,7 +105,13 @@ def _obtener_roles_usuario(db: Session, id_usuario: int) -> list[RolInfo]:
     return [RolInfo(id_rol=r.id_rol, nombre=r.nombre, descripcion=r.descripcion) for r in rows]
 
 
-def _obtener_profile_info(db: Session, usuario: Usuario) -> tuple[int | None, str | None]:
+def _obtener_profile_info(db: Session, usuario: Usuario, nombre_rol: str) -> tuple[int | None, str | None]:
+    if nombre_rol == 'alumno' and usuario.alumno:
+        return usuario.alumno.id_alumno, "alumno"
+    if nombre_rol == 'docente' and usuario.docente:
+        return usuario.docente.id_docente, "docente"
+    if nombre_rol in ('adm_informatico', 'adm_legal', 'adm_contable', 'adm_director', 'adm_pasante') and usuario.administrativo:
+        return usuario.administrativo.id_administrativo, "administrativo"
     if usuario.alumno:
         return usuario.alumno.id_alumno, "alumno"
     if usuario.docente:

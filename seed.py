@@ -115,6 +115,7 @@ def seed():
             "horarios.ver",
             "notas.subir", "notas.ver",
             "alumnos.ver",
+            "docentes.ver",
         ],
 
         "alumno": [
@@ -227,7 +228,7 @@ def seed():
                 apellido="Toledo",
                 genero="masculino",
                 extension="LP",
-                grado="Licenciado",
+                grado="Lic.",
                 titulo="Ingeniero de Sistemas",
                 celular="70000000",
                 correo=email,
