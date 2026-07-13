@@ -1,5 +1,8 @@
 from database import SessionLocal
 from models import Rol, Permiso, RolesPermiso, ModalidadAcademica, Requisito, Usuario, UsuarioRol, Alumno, Docente, Administrativo
+from models.tipo_descuento import TipoDescuento
+from models.modalidad_tipo_descuento import ModalidadTipoDescuento
+from models.tipo_descuento_requisito import TipoDescuentoRequisito
 from passlib.context import CryptContext
 from datetime import date
 
@@ -46,9 +49,9 @@ def seed():
         "pagos.ver", "pagos.registrar",
 
         "tipos_programa.ver", "tipos_programa.crear", "tipos_programa.editar",
-        "modalidades_academicas.ver", "modalidades_academicas.editar",
-        "requisitos.ver", "requisitos.crear", "requisitos.editar",
-        "tipos_descuento.ver", "tipos_descuento.crear", "tipos_descuento.editar",
+        "modalidades_academicas.ver", "modalidades_academicas.crear", "modalidades_academicas.editar",
+        "requisitos.ver", "requisitos.crear", "requisitos.editar", "requisitos.eliminar",
+        "tipos_descuento.ver", "tipos_descuento.crear", "tipos_descuento.editar", "tipos_descuento.eliminar",
 
         "historial.ver",
         "notas.subir", "notas.ver", "notas.aprobar",
@@ -71,9 +74,9 @@ def seed():
             "alumnos.ver",
             "documentos.revisar", "documentos.aprobar",
             "tipos_programa.ver", "tipos_programa.crear", "tipos_programa.editar",
-            "modalidades_academicas.ver", "modalidades_academicas.editar",
-            "requisitos.ver", "requisitos.crear", "requisitos.editar",
-            "tipos_descuento.ver", "tipos_descuento.crear", "tipos_descuento.editar",
+            "modalidades_academicas.ver", "modalidades_academicas.crear", "modalidades_academicas.editar",
+            "requisitos.ver", "requisitos.crear", "requisitos.editar", "requisitos.eliminar",
+            "tipos_descuento.ver", "tipos_descuento.crear", "tipos_descuento.editar", "tipos_descuento.eliminar",
             "historial.ver",
         ],
 
@@ -193,6 +196,152 @@ def seed():
             print(f"    ✅ Requisito: {req['nombre']}")
         else:
             print(f"    🔄 Requisito: {existente.nombre}")
+
+    modalidad_profesionales = db.query(ModalidadAcademica).filter(
+        ModalidadAcademica.nombre_modalidad == "Profesionales"
+    ).first()
+    if not modalidad_profesionales:
+        modalidad_profesionales = ModalidadAcademica(
+            nombre_modalidad="Profesionales",
+            descripcion="Modalidad de formación profesional con título oficial",
+            requiere_titulo=True,
+            estado="activo",
+        )
+        db.add(modalidad_profesionales)
+        db.commit()
+        db.refresh(modalidad_profesionales)
+        print(f"  ✅ Modalidad: {modalidad_profesionales.nombre_modalidad}")
+    else:
+        print(f"  🔄 Modalidad: {modalidad_profesionales.nombre_modalidad}")
+
+    requisitos_prof = [
+        {"nombre": "Avance Académico de la UAGRM", "descripcion": "Avance académico emitido por la UAGRM"},
+    ]
+    for req in requisitos_prof:
+        existente = db.query(Requisito).filter(
+            Requisito.nombre == req["nombre"],
+            Requisito.id_modalidad_academica == modalidad_profesionales.id_modalidad_academica,
+        ).first()
+        if not existente:
+            req_obj = Requisito(
+                nombre=req["nombre"],
+                id_modalidad_academica=modalidad_profesionales.id_modalidad_academica,
+                descripcion=req["descripcion"],
+                estado="activo",
+            )
+            db.add(req_obj)
+            db.commit()
+            print(f"    ✅ Requisito: {req['nombre']}")
+        else:
+            print(f"    🔄 Requisito: {existente.nombre}")
+
+    requisito_beca = db.query(Requisito).filter(
+        Requisito.nombre == "Media Beca UAGRM"
+    ).first()
+    if not requisito_beca:
+        requisito_beca = Requisito(
+            nombre="Media Beca UAGRM",
+            id_modalidad_academica=None,
+            descripcion="Documento que acredita media beca de la Universidad Autónoma Gabriel René Moreno",
+            obligatorio=False,
+            estado="activo",
+        )
+        db.add(requisito_beca)
+        db.commit()
+        db.refresh(requisito_beca)
+        print(f"  ✅ Requisito (descuento): Media Beca UAGRM")
+    else:
+        print(f"  🔄 Requisito (descuento): Media Beca UAGRM")
+
+    descuento_beca = db.query(TipoDescuento).filter(
+        TipoDescuento.nombre == "Beca 50%"
+    ).first()
+    if not descuento_beca:
+        descuento_beca = TipoDescuento(
+            nombre="Beca 50%",
+            porcentaje=50.0,
+            descripcion="Beca del 50% para estudiantes de Educación Continua",
+            estado="activo",
+        )
+        db.add(descuento_beca)
+        db.commit()
+        db.refresh(descuento_beca)
+        print(f"  ✅ Tipo descuento: Beca 50%")
+    else:
+        print(f"  🔄 Tipo descuento: Beca 50%")
+
+    descuento_contado = db.query(TipoDescuento).filter(
+        TipoDescuento.nombre == "Descuento 10% Pago al Contado"
+    ).first()
+    if not descuento_contado:
+        descuento_contado = TipoDescuento(
+            nombre="Descuento 10% Pago al Contado",
+            porcentaje=10.0,
+            descripcion="Descuento del 10% por pago al contado, aplica a todas las modalidades",
+            estado="activo",
+        )
+        db.add(descuento_contado)
+        db.commit()
+        db.refresh(descuento_contado)
+        print(f"  ✅ Tipo descuento: Descuento 10% Pago al Contado")
+    else:
+        print(f"  🔄 Tipo descuento: Descuento 10% Pago al Contado")
+
+    vinculo = db.query(ModalidadTipoDescuento).filter(
+        ModalidadTipoDescuento.id_modalidad_academica == modalidad_ed_continua.id_modalidad_academica,
+        ModalidadTipoDescuento.id_tipo_descuento == descuento_beca.id_tipo_descuento,
+    ).first()
+    if not vinculo:
+        db.add(ModalidadTipoDescuento(
+            id_modalidad_academica=modalidad_ed_continua.id_modalidad_academica,
+            id_tipo_descuento=descuento_beca.id_tipo_descuento,
+        ))
+        db.commit()
+        print(f"  ✅ Beca 50% → Educación Continua")
+    else:
+        print(f"  🔄 Beca 50% → Educación Continua ya vinculado")
+
+    vinculo2 = db.query(ModalidadTipoDescuento).filter(
+        ModalidadTipoDescuento.id_modalidad_academica == modalidad_ed_continua.id_modalidad_academica,
+        ModalidadTipoDescuento.id_tipo_descuento == descuento_contado.id_tipo_descuento,
+    ).first()
+    if not vinculo2:
+        db.add(ModalidadTipoDescuento(
+            id_modalidad_academica=modalidad_ed_continua.id_modalidad_academica,
+            id_tipo_descuento=descuento_contado.id_tipo_descuento,
+        ))
+        db.commit()
+        print(f"  ✅ Descuento 10% → Educación Continua")
+    else:
+        print(f"  🔄 Descuento 10% → Educación Continua ya vinculado")
+
+    vinculo3 = db.query(ModalidadTipoDescuento).filter(
+        ModalidadTipoDescuento.id_modalidad_academica == modalidad_profesionales.id_modalidad_academica,
+        ModalidadTipoDescuento.id_tipo_descuento == descuento_contado.id_tipo_descuento,
+    ).first()
+    if not vinculo3:
+        db.add(ModalidadTipoDescuento(
+            id_modalidad_academica=modalidad_profesionales.id_modalidad_academica,
+            id_tipo_descuento=descuento_contado.id_tipo_descuento,
+        ))
+        db.commit()
+        print(f"  ✅ Descuento 10% → Profesionales")
+    else:
+        print(f"  🔄 Descuento 10% → Profesionales ya vinculado")
+
+    vinculo_req = db.query(TipoDescuentoRequisito).filter(
+        TipoDescuentoRequisito.id_tipo_descuento == descuento_beca.id_tipo_descuento,
+        TipoDescuentoRequisito.id_requisito == requisito_beca.id_requisito,
+    ).first()
+    if not vinculo_req:
+        db.add(TipoDescuentoRequisito(
+            id_tipo_descuento=descuento_beca.id_tipo_descuento,
+            id_requisito=requisito_beca.id_requisito,
+        ))
+        db.commit()
+        print(f"  ✅ Beca 50% requiere: Media Beca UAGRM")
+    else:
+        print(f"  🔄 Beca 50% requiere: Media Beca UAGRM ya vinculado")
 
     email = "julio.toledo2030@gmail.com"
     password = pwd_context.hash("adminjt")
