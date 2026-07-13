@@ -9,6 +9,9 @@ from models.programa import Programa
 from models.tipo_programa import TipoPrograma
 from models.modulo import Modulo
 from models.detalle_programa_modulo import DetalleProgramaModulo
+from models.detalle_programa_alumno import DetalleProgramaAlumno
+from models.alumno import Alumno
+from models.control_documentacion import ControlDocumentacion
 from schemas.programa_version_edicion import ProgramaVersionEdicionCreate, ProgramaVersionEdicionUpdate, ProgramaVersionEdicionResponse
 from schemas.auth import UserResponse
 
@@ -285,3 +288,54 @@ def editar(id: int, data: ProgramaVersionEdicionUpdate, db: Session = Depends(ge
         ProgramaVersionEdicion.id_programa_version_edicion == id
     ).first()
     return pve
+
+
+@router.get("/{id}/postulantes")
+def postulantes_por_edicion(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.ver"))):
+    pve = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion == id
+    ).first()
+    if not pve:
+        raise HTTPException(status_code=404, detail="Edición no encontrada")
+
+    detalles = db.query(DetalleProgramaAlumno).filter(
+        DetalleProgramaAlumno.id_programa_version_edicion == id
+    ).all()
+
+    resultado = []
+    for detalle in detalles:
+        alumno = db.query(Alumno).filter(Alumno.id_alumno == detalle.id_alumno).first()
+        controles = db.query(ControlDocumentacion).filter(
+            ControlDocumentacion.id_detalle_programa_alumno == detalle.id_detalle_programa_alumno
+        ).all()
+
+        total_docs = len(controles)
+        docs_ok = sum(1 for c in controles if c.estado in ("aceptado", "entregado"))
+
+        resultado.append({
+            "id_detalle_programa_alumno": detalle.id_detalle_programa_alumno,
+            "estado": detalle.estado,
+            "fecha_inscripcion": str(detalle.fecha_inscripcion) if detalle.fecha_inscripcion else None,
+            "descuento_aplicado": detalle.descuento_aplicado,
+            "alumno": {
+                "id_alumno": alumno.id_alumno if alumno else None,
+                "nombre": alumno.nombre if alumno else "N/A",
+                "apellido": alumno.apellido if alumno else "N/A",
+                "ci": alumno.ci if alumno else None,
+                "correo": alumno.correo if alumno else None,
+            } if alumno else None,
+            "control_documentacion": [{
+                "id_control_documentacion": c.id_control_documentacion,
+                "id_requisito": c.id_requisito,
+                "estado": c.estado,
+                "obligatorio": c.obligatorio,
+                "url_documento": c.url_documento,
+                "fecha_entrega": str(c.fecha_entrega) if c.fecha_entrega else None,
+                "fecha_revision": str(c.fecha_revision) if c.fecha_revision else None,
+                "observaciones": c.observaciones,
+            } for c in controles],
+            "docs_completados": docs_ok,
+            "docs_total": total_docs,
+        })
+
+    return resultado
