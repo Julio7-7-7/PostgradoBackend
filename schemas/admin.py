@@ -33,14 +33,19 @@ class RolResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ProfileInfo(BaseModel):
+    type: str
+    id: int
+    nombre: str
+
+
 class UserAdminResponse(BaseModel):
     id_usuario: int
     email: str
     activo: bool
     roles: list[str]
     id_roles: list[int]
-    profile_type: str | None = None
-    profile_nombre: str | None = None
+    perfiles: list[ProfileInfo] = []
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -56,8 +61,26 @@ class UserAdminCreate(BaseModel):
     celular: str | None = None
 
 
+class UserAdminUpdate(BaseModel):
+    email: str | None = None
+    password: str | None = None
+    ci: str | None = None
+    nombre: str | None = None
+    apellido: str | None = None
+    celular: str | None = None
+    cargo: str | None = None
+
+
 class UserUpdateRoles(BaseModel):
     roles: list[int]
+
+
+class PaginatedUsersResponse(BaseModel):
+    items: list[UserAdminResponse]
+    total: int
+    page: int
+    per_page: int
+    pages: int
 
 
 class BatchAsignacion(BaseModel):

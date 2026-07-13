@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import and_
 from database import get_db
 from models.rol import Rol
 from models.permiso import Permiso
@@ -103,7 +104,7 @@ def actualizar_rol(
     id_rol: int,
     data: RolUpdate,
     db: Session = Depends(get_db),
-    _: UserResponse = Depends(require_permiso("roles.gestionar")),
+    current_user: UserResponse = Depends(require_permiso("roles.gestionar")),
 ):
     rol = db.query(Rol).filter(Rol.id_rol == id_rol).first()
     if not rol:
@@ -118,6 +119,21 @@ def actualizar_rol(
     if data.descripcion is not None:
         rol.descripcion = data.descripcion
     if data.permisos is not None:
+        permiso_gestionar = db.query(Permiso).filter(Permiso.codigo == "roles.gestionar").first()
+        if permiso_gestionar:
+            queria_quitar = permiso_gestionar.id_permiso not in data.permisos
+            tiene_usuarios = db.query(UsuarioRol).filter(UsuarioRol.id_rol == id_rol).first()
+            if queria_quitar and tiene_usuarios:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No se puede quitar el permiso 'roles.gestionar' de un rol que tiene usuarios asignados",
+                )
+            if queria_quitar and current_user.id_rol == id_rol:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No podés quitar 'roles.gestionar' de tu propio rol activo",
+                )
+
         db.query(RolesPermiso).filter(RolesPermiso.id_rol == id_rol).delete()
         for id_permiso in data.permisos:
             permiso = db.query(Permiso).filter(Permiso.id_permiso == id_permiso).first()
@@ -168,12 +184,15 @@ def asignar_permisos_batch(
     _: UserResponse = Depends(require_permiso("roles.gestionar")),
 ):
     procesados = 0
+    errores = []
     for cambio in data.cambios:
         rol = db.query(Rol).filter(Rol.id_rol == cambio.id_rol).first()
         if not rol:
+            errores.append(f"Rol {cambio.id_rol} no existe")
             continue
         permiso = db.query(Permiso).filter(Permiso.id_permiso == cambio.id_permiso).first()
         if not permiso:
+            errores.append(f"Permiso {cambio.id_permiso} no existe")
             continue
 
         existente = db.query(RolesPermiso).filter(
@@ -189,4 +208,6 @@ def asignar_permisos_batch(
             procesados += 1
 
     db.commit()
+    if errores:
+        return {"detail": f"{procesados} cambios procesados", "errores": errores}
     return {"detail": f"{procesados} cambios procesados"}
