@@ -65,6 +65,18 @@ class LoginStep1Response(BaseModel):
     roles: list[RolInfo]
 
 
+class RegistroRequest(BaseModel):
+    email: str
+    password: str
+    ci: str
+    honeypot: str | None = None
+
+
+class CambiarPasswordRequest(BaseModel):
+    password_actual: str
+    password_nuevo: str
+
+
 class MeResponse(BaseModel):
     id_usuario: int
     email: str

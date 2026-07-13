@@ -75,6 +75,13 @@ class AlumnoUpdate(BaseModel):
     direccion: str | None = None
     estado: EstadoAlumnoEnum | None = None
 
+    @field_validator("fecha_nacimiento", mode="before")
+    @classmethod
+    def parse_fecha(cls, v):
+        if isinstance(v, str) and "T" in v:
+            return v.split("T")[0]
+        return v
+
 class AlumnoResponse(AlumnoBase):
     id_alumno: int
     created_at: datetime

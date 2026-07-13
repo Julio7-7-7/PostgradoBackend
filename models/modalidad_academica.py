@@ -16,4 +16,5 @@ class ModalidadAcademica(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
     requisitos = relationship("Requisito", back_populates="modalidad_academica")
+    tipos_descuento = relationship("TipoDescuento", secondary="modalidad_tipo_descuento", back_populates="modalidades")
     detalles_alumno = relationship("DetalleProgramaAlumno", back_populates="modalidad_academica")

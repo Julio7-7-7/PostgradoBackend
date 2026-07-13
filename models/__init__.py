@@ -13,6 +13,8 @@ from models.requisito import Requisito
 from models.control_documentacion import ControlDocumentacion
 from models.historial_modulo import HistorialModulo
 from models.tipo_descuento import TipoDescuento
+from models.modalidad_tipo_descuento import ModalidadTipoDescuento
+from models.tipo_descuento_requisito import TipoDescuentoRequisito
 from models.contratacion_docente import ContratacionDocente
 from models.documento_contratacion import DocumentoContratacion
 from models.rol import Rol

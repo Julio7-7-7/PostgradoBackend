@@ -5,6 +5,7 @@ from dependencies import get_current_user, require_permiso
 from models.detalle_programa_alumno import DetalleProgramaAlumno
 from models.modalidad_academica import ModalidadAcademica
 from models.tipo_descuento import TipoDescuento
+from models.modalidad_tipo_descuento import ModalidadTipoDescuento
 from models.control_documentacion import ControlDocumentacion
 from models.requisito import Requisito
 from schemas.detalle_programa_alumno import DetalleProgramaAlumnoCreate, DetalleProgramaAlumnoUpdate, DetalleProgramaAlumnoResponse
@@ -32,6 +33,37 @@ def generar_control_documentacion(id_detalle: int, id_modalidad_academica: int, 
         db.add(control)
     db.commit()
 
+
+def generar_control_descuento(id_detalle: int, id_modalidad_academica: int, id_tipo_descuento: int, db: Session):
+    vinculo = db.query(ModalidadTipoDescuento).filter(
+        ModalidadTipoDescuento.id_modalidad_academica == id_modalidad_academica,
+        ModalidadTipoDescuento.id_tipo_descuento == id_tipo_descuento,
+    ).first()
+    if not vinculo:
+        return
+
+    tipo_desc = db.query(TipoDescuento).filter(
+        TipoDescuento.id_tipo_descuento == id_tipo_descuento
+    ).first()
+
+    for requisito in tipo_desc.requisitos:
+        existente = db.query(ControlDocumentacion).filter(
+            ControlDocumentacion.id_detalle_programa_alumno == id_detalle,
+            ControlDocumentacion.id_requisito == requisito.id_requisito,
+        ).first()
+        if existente:
+            existente.obligatorio = True
+        else:
+            control = ControlDocumentacion(
+                id_detalle_programa_alumno=id_detalle,
+                id_requisito=requisito.id_requisito,
+                estado="pendiente",
+                obligatorio=True,
+            )
+            db.add(control)
+    db.commit()
+
+
 @router.post("/", response_model=DetalleProgramaAlumnoResponse, status_code=201)
 def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.crear"))):
     modalidad = db.query(ModalidadAcademica).filter(
@@ -52,7 +84,6 @@ def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db), curr
                 detail=f"El alumno ya utilizó la modalidad '{modalidad.nombre_modalidad}' anteriormente"
             )
 
-    tipo_descuento = None
     if data.id_tipo_descuento:
         tipo_descuento = db.query(TipoDescuento).filter(
             TipoDescuento.id_tipo_descuento == data.id_tipo_descuento
@@ -68,23 +99,8 @@ def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db), curr
 
     generar_control_documentacion(nuevo.id_detalle_programa_alumno, data.id_modalidad_academica, db)
 
-    if tipo_descuento and tipo_descuento.requiere_documento and tipo_descuento.id_requisito_extra:
-        control_existente = db.query(ControlDocumentacion).filter(
-            ControlDocumentacion.id_detalle_programa_alumno == nuevo.id_detalle_programa_alumno,
-            ControlDocumentacion.id_requisito == tipo_descuento.id_requisito_extra
-        ).first()
-        if control_existente:
-            control_existente.obligatorio = True
-            db.commit()
-        else:
-            control_extra = ControlDocumentacion(
-                id_detalle_programa_alumno=nuevo.id_detalle_programa_alumno,
-                id_requisito=tipo_descuento.id_requisito_extra,
-                estado="pendiente",
-                obligatorio=True
-            )
-            db.add(control_extra)
-            db.commit()
+    if data.id_tipo_descuento:
+        generar_control_descuento(nuevo.id_detalle_programa_alumno, data.id_modalidad_academica, data.id_tipo_descuento, db)
 
     db.refresh(nuevo)
     return nuevo
@@ -134,7 +150,6 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
             )
 
     descuento_aplicado = 0.0
-    tipo_descuento = None
     if data.id_tipo_descuento:
         tipo_descuento = db.query(TipoDescuento).filter(
             TipoDescuento.id_tipo_descuento == data.id_tipo_descuento,
@@ -160,15 +175,8 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
 
     generar_control_documentacion(nuevo.id_detalle_programa_alumno, data.id_modalidad_academica, db)
 
-    if tipo_descuento and tipo_descuento.requiere_documento and tipo_descuento.id_requisito_extra:
-        control_extra = ControlDocumentacion(
-            id_detalle_programa_alumno=nuevo.id_detalle_programa_alumno,
-            id_requisito=tipo_descuento.id_requisito_extra,
-            estado="pendiente",
-            obligatorio=True,
-        )
-        db.add(control_extra)
-        db.commit()
+    if data.id_tipo_descuento:
+        generar_control_descuento(nuevo.id_detalle_programa_alumno, data.id_modalidad_academica, data.id_tipo_descuento, db)
 
     db.refresh(nuevo)
     return nuevo
