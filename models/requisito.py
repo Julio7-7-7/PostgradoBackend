@@ -7,7 +7,7 @@ class Requisito(Base):
     __tablename__ = "requisitos"
 
     id_requisito = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    id_modalidad_academica = Column(Integer, ForeignKey("modalidades_academicas.id_modalidad_academica"), nullable=False)
+    id_modalidad_academica = Column(Integer, ForeignKey("modalidades_academicas.id_modalidad_academica"), nullable=True)
     nombre = Column(String(200), nullable=False)
     descripcion = Column(String(500), nullable=True)
     obligatorio = Column(Boolean, default=True, nullable=False)
@@ -21,3 +21,4 @@ class Requisito(Base):
 
     modalidad_academica = relationship("ModalidadAcademica", back_populates="requisitos")
     control_documentacion = relationship("ControlDocumentacion", back_populates="requisito")
+    tipos_descuento = relationship("TipoDescuento", secondary="tipo_descuento_requisito", back_populates="requisitos")

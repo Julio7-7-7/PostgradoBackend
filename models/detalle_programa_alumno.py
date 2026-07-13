@@ -21,5 +21,4 @@ class DetalleProgramaAlumno(Base):
     modalidad_academica = relationship("ModalidadAcademica", back_populates="detalles_alumno")
     tipo_descuento = relationship("TipoDescuento", back_populates="detalles_alumno")
     programa_version_edicion = relationship("ProgramaVersionEdicion", back_populates="detalles_alumno")
-    control_documentacion = relationship("ControlDocumentacion", back_populates="detalle_programa_alumno")
     control_documentacion = relationship("ControlDocumentacion", back_populates="detalle_programa_alumno", cascade="all, delete-orphan")
