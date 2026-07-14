@@ -10,7 +10,6 @@ class ModalidadAcademica(Base):
     nombre_modalidad = Column(String(100), nullable=False, unique=True)
     descripcion = Column(String(500), nullable=True)
     requiere_titulo = Column(Boolean, default=False, nullable=False)
-    uso_unico = Column(Boolean, default=False, nullable=False)
     estado = Column(String(20), nullable=False, default="activo")
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

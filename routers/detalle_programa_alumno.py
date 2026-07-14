@@ -72,27 +72,29 @@ def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db), curr
     if not modalidad:
         raise HTTPException(status_code=404, detail="Modalidad académica no encontrada")
 
-    if modalidad.uso_unico:
-        usado = db.query(DetalleProgramaAlumno).filter(
-            DetalleProgramaAlumno.id_alumno == data.id_alumno,
-            DetalleProgramaAlumno.id_modalidad_academica == data.id_modalidad_academica,
-            DetalleProgramaAlumno.estado.notin_(["postulante"])
-        ).first()
-        if usado:
-            raise HTTPException(
-                status_code=400,
-                detail=f"El alumno ya utilizó la modalidad '{modalidad.nombre_modalidad}' anteriormente"
-            )
-
+    descuento_aplicado = 0.0
     if data.id_tipo_descuento:
         tipo_descuento = db.query(TipoDescuento).filter(
             TipoDescuento.id_tipo_descuento == data.id_tipo_descuento
         ).first()
         if not tipo_descuento:
             raise HTTPException(status_code=404, detail="Tipo de descuento no encontrado")
-        data.descuento_aplicado = tipo_descuento.porcentaje
+        descuento_aplicado = tipo_descuento.porcentaje
+
+        if tipo_descuento.uso_unico:
+            usado = db.query(DetalleProgramaAlumno).filter(
+                DetalleProgramaAlumno.id_alumno == data.id_alumno,
+                DetalleProgramaAlumno.id_tipo_descuento == data.id_tipo_descuento,
+                DetalleProgramaAlumno.estado.notin_(["postulante", "observado"])
+            ).first()
+            if usado:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"El alumno ya utilizó el beneficio '{tipo_descuento.nombre}' anteriormente"
+                )
 
     nuevo = DetalleProgramaAlumno(**data.model_dump())
+    nuevo.descuento_aplicado = descuento_aplicado
     db.add(nuevo)
     db.commit()
     db.refresh(nuevo)
@@ -137,18 +139,6 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
     if modalidad.estado != "activo":
         raise HTTPException(status_code=400, detail="La modalidad académica no está activa")
 
-    if modalidad.uso_unico:
-        usado = db.query(DetalleProgramaAlumno).filter(
-            DetalleProgramaAlumno.id_alumno == current_user.id_profile,
-            DetalleProgramaAlumno.id_modalidad_academica == data.id_modalidad_academica,
-            DetalleProgramaAlumno.estado.notin_(["postulante"])
-        ).first()
-        if usado:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Ya utilizaste la modalidad '{modalidad.nombre_modalidad}' anteriormente"
-            )
-
     descuento_aplicado = 0.0
     if data.id_tipo_descuento:
         tipo_descuento = db.query(TipoDescuento).filter(
@@ -158,6 +148,18 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
         if not tipo_descuento:
             raise HTTPException(status_code=404, detail="Tipo de descuento no encontrado o inactivo")
         descuento_aplicado = tipo_descuento.porcentaje
+
+        if tipo_descuento.uso_unico:
+            usado = db.query(DetalleProgramaAlumno).filter(
+                DetalleProgramaAlumno.id_alumno == current_user.id_profile,
+                DetalleProgramaAlumno.id_tipo_descuento == data.id_tipo_descuento,
+                DetalleProgramaAlumno.estado.notin_(["postulante", "observado"])
+            ).first()
+            if usado:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Ya utilizaste el beneficio '{tipo_descuento.nombre}' anteriormente"
+                )
 
     from datetime import date
     nuevo = DetalleProgramaAlumno(

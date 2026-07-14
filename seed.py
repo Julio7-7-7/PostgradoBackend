@@ -260,7 +260,8 @@ def seed():
         descuento_beca = TipoDescuento(
             nombre="Beca 50%",
             porcentaje=50.0,
-            descripcion="Beca del 50% para estudiantes de Educación Continua",
+            descripcion="Beca del 50% para estudiantes de Educación Continua. Uso único: el alumno puede reservarla para usarla cuando desee.",
+            uso_unico=True,
             estado="activo",
         )
         db.add(descuento_beca)
