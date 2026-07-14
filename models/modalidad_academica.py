@@ -16,4 +16,5 @@ class ModalidadAcademica(Base):
 
     requisitos = relationship("Requisito", back_populates="modalidad_academica")
     tipos_descuento = relationship("TipoDescuento", secondary="modalidad_tipo_descuento", back_populates="modalidades")
+    tipos_programa = relationship("TipoPrograma", secondary="modalidad_tipo_programa", back_populates="modalidades")
     detalles_alumno = relationship("DetalleProgramaAlumno", back_populates="modalidad_academica")

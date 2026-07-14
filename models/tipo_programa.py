@@ -15,4 +15,5 @@ class TipoPrograma(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
     programas = relationship("Programa", back_populates="tipo_programa")
+    modalidades = relationship("ModalidadAcademica", secondary="modalidad_tipo_programa", back_populates="tipos_programa")
 

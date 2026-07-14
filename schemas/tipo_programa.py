@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict, field_validator
 from datetime import datetime
 from enum import Enum
+from schemas.modalidad_academica import ModalidadAcademicaResponse
 
 class EstadoEnum(str, Enum):
     activo = "activo"
@@ -36,16 +37,18 @@ class TipoProgramaBase(BaseModel):
         return v
 
 class TipoProgramaCreate(TipoProgramaBase):
-    pass
+    modalidades: list[int] = []
 
 class TipoProgramaUpdate(BaseModel):
     nombre: str | None = None
     estado: EstadoEnum | None = None
     cupo_minimo: int | None = None
     duracion_minima_meses: int | None = None
+    modalidades: list[int] | None = None
 
 class TipoProgramaResponse(TipoProgramaBase):
     id_tipo_programa: int
+    modalidades: list[ModalidadAcademicaResponse] = []
     created_at: datetime
     updated_at: datetime
 
