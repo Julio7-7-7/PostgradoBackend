@@ -8,13 +8,13 @@ from schemas.tipo_descuento import TipoDescuentoResponse
 
 class EstadoDetalleAlumnoEnum(str, Enum):
     postulante = "postulante"
+    observado = "observado"
     inscrito = "inscrito"
     en_curso = "en_curso"
     finalizado = "finalizado"
     graduado = "graduado"
     titulado = "titulado"
     retirado = "retirado"
-    convalidando = "convalidando"
 
 class DetalleProgramaAlumnoBase(BaseModel):
     id_programa_version_edicion: int

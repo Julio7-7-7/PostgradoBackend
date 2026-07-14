@@ -1,8 +1,9 @@
 from database import SessionLocal
-from models import Rol, Permiso, RolesPermiso, ModalidadAcademica, Requisito, Usuario, UsuarioRol, Alumno, Docente, Administrativo
+from models import Rol, Permiso, RolesPermiso, ModalidadAcademica, Requisito, Usuario, UsuarioRol, Alumno, Docente, Administrativo, TipoPrograma
 from models.tipo_descuento import TipoDescuento
 from models.modalidad_tipo_descuento import ModalidadTipoDescuento
 from models.tipo_descuento_requisito import TipoDescuentoRequisito
+from models.modalidad_tipo_programa import ModalidadTipoPrograma
 from passlib.context import CryptContext
 from datetime import date
 
@@ -253,6 +254,46 @@ def seed():
     else:
         print(f"  🔄 Requisito (descuento): Media Beca UAGRM")
 
+    tipos_programa_data = [
+        {"nombre": "Diplomado", "duracion_minima_meses": 6},
+        {"nombre": "Maestría", "duracion_minima_meses": 18},
+        {"nombre": "Curso", "duracion_minima_meses": 3},
+    ]
+    tipos_programa = {}
+    for tp_data in tipos_programa_data:
+        tp = db.query(TipoPrograma).filter(TipoPrograma.nombre == tp_data["nombre"]).first()
+        if not tp:
+            tp = TipoPrograma(nombre=tp_data["nombre"], duracion_minima_meses=tp_data["duracion_minima_meses"], estado="activo")
+            db.add(tp)
+            db.commit()
+            db.refresh(tp)
+            print(f"  ✅ Tipo de programa: {tp.nombre}")
+        else:
+            print(f"  🔄 Tipo de programa: {tp.nombre}")
+        tipos_programa[tp.nombre] = tp
+
+    modalidades_programa = {
+        "Diplomado": [modalidad_ed_continua, modalidad_profesionales],
+        "Maestría": [modalidad_profesionales],
+        "Curso": [modalidad_profesionales],
+    }
+    for nombre_tp, mods in modalidades_programa.items():
+        tp = tipos_programa[nombre_tp]
+        for mod in mods:
+            vinculo = db.query(ModalidadTipoPrograma).filter(
+                ModalidadTipoPrograma.id_tipo_programa == tp.id_tipo_programa,
+                ModalidadTipoPrograma.id_modalidad_academica == mod.id_modalidad_academica,
+            ).first()
+            if not vinculo:
+                db.add(ModalidadTipoPrograma(
+                    id_tipo_programa=tp.id_tipo_programa,
+                    id_modalidad_academica=mod.id_modalidad_academica,
+                ))
+                db.commit()
+                print(f"  ✅ {nombre_tp} ↔ {mod.nombre_modalidad}")
+            else:
+                print(f"  🔄 {nombre_tp} ↔ {mod.nombre_modalidad} ya vinculado")
+
     descuento_beca = db.query(TipoDescuento).filter(
         TipoDescuento.nombre == "Beca 50%"
     ).first()
@@ -260,7 +301,8 @@ def seed():
         descuento_beca = TipoDescuento(
             nombre="Beca 50%",
             porcentaje=50.0,
-            descripcion="Beca del 50% para estudiantes de Educación Continua",
+            descripcion="Beca del 50% para estudiantes de Educación Continua. Uso único: el alumno puede reservarla para usarla cuando desee.",
+            uso_unico=True,
             estado="activo",
         )
         db.add(descuento_beca)

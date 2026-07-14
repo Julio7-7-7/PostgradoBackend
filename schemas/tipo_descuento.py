@@ -13,6 +13,7 @@ class TipoDescuentoBase(BaseModel):
     nombre: str
     porcentaje: float
     descripcion: str | None = None
+    uso_unico: bool = False
     estado: EstadoTipoDescuentoEnum = EstadoTipoDescuentoEnum.activo
 
     @field_validator("nombre")
@@ -37,6 +38,7 @@ class TipoDescuentoUpdate(BaseModel):
     nombre: str | None = None
     porcentaje: float | None = None
     descripcion: str | None = None
+    uso_unico: bool | None = None
     estado: EstadoTipoDescuentoEnum | None = None
     modalidades: list[int] | None = None
     requisitos: list[int] | None = None

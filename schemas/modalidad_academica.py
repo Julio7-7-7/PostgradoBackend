@@ -10,7 +10,6 @@ class ModalidadAcademicaBase(BaseModel):
     nombre_modalidad: str
     descripcion: str | None = None
     requiere_titulo: bool = False
-    uso_unico: bool = False
     estado: EstadoModalidadAcademicaEnum = EstadoModalidadAcademicaEnum.activo
 
     @field_validator("nombre_modalidad")
@@ -29,7 +28,6 @@ class ModalidadAcademicaUpdate(BaseModel):
     nombre_modalidad: str | None = None
     descripcion: str | None = None
     requiere_titulo: bool | None = None
-    uso_unico: bool | None = None
     estado: EstadoModalidadAcademicaEnum | None = None
 
 class ModalidadAcademicaResponse(ModalidadAcademicaBase):
