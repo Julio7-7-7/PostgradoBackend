@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, ForeignKey
+from sqlalchemy import Column, Integer, ForeignKey, DateTime
+from sqlalchemy.sql import func
 from database import Base
 
 
@@ -15,3 +16,4 @@ class ModalidadRequisito(Base):
         ForeignKey("requisitos.id_requisito", ondelete="CASCADE"),
         primary_key=True,
     )
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)

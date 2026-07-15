@@ -41,8 +41,7 @@ def crear(data: ModalidadAcademicaCreate, db: Session = Depends(get_db), current
         estado=data.estado,
     )
     db.add(nueva)
-    db.commit()
-    db.refresh(nueva)
+    db.flush()
 
     _sincronizar_requisitos(nueva, data.requisitos, db)
     db.commit()
@@ -89,12 +88,15 @@ def editar(id: int, data: ModalidadAcademicaUpdate, db: Session = Depends(get_db
     ).first()
 
 
-@router.delete("/{id}", status_code=204)
-def eliminar(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("modalidades_academicas.editar"))):
+@router.patch("/{id}/cambiar-estado", response_model=ModalidadAcademicaResponse)
+def cambiar_estado(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("modalidades_academicas.editar"))):
     modalidad = db.query(ModalidadAcademica).filter(
         ModalidadAcademica.id_modalidad_academica == id
     ).first()
     if not modalidad:
         raise HTTPException(status_code=404, detail="No encontrado")
-    db.delete(modalidad)
+    modalidad.estado = "inactivo" if modalidad.estado == "activo" else "activo"
     db.commit()
+    return _cargar_con_relations(
+        db.query(ModalidadAcademica).filter(ModalidadAcademica.id_modalidad_academica == id)
+    ).first()

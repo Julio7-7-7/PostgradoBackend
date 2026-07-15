@@ -1,11 +1,7 @@
-from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, field_validator
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from schemas.requisito import RequisitoResponse
+from schemas.requisito import RequisitoResponse
 
 class EstadoModalidadAcademicaEnum(str, Enum):
     activo = "activo"
