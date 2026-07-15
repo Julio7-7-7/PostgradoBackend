@@ -1,0 +1,212 @@
+================================================================================
+                         DIAGRAMA ER - POSTGRADO
+                     (Base de datos: postgrado)
+================================================================================
+
+
+  ┌─────────────────────────────────────────────────────────────────────────────┐
+  │                              AUTH                                           │
+  └─────────────────────────────────────────────────────────────────────────────┘
+
+  USUARIOS                          ROLES
+  ┌──────────────────────┐          ┌──────────────────────┐
+  │ PK id_usuario        │   N  N   │ PK id_rol            │
+  │    nombre            │◄────────►│    nombre            │
+  │    email (UK)        │ usuario_ │    estado            │
+  │    password_hash     │  roles   │                      │
+  │    estado            │          │                      │
+  │    created_at        │          │                      │
+  │    updated_at        │          │                      │
+  └──────────┬───────────┘          └──────────┬───────────┘
+             │                                 │
+             │ 1                               │ 1
+             │                                 │
+             ▼ N                               ▼ N
+  ┌──────────────────────┐          ┌──────────────────────┐
+  │ ALUMNOS              │          │ ROLES_PERMISOS       │
+  │ PK id_alumno         │          │ FK id_rol            │
+  │ FK id_usuario        │          │ FK id_permiso        │
+  │    nombre            │          └──────────┬───────────┘
+  │    email             │                     │
+  │    telefono          │                     │ N
+  │    ci                │                     │
+  │    fecha_nacimiento  │                     ▼ 1
+  │    genero            │          ┌──────────────────────┐
+  │    direccion         │          │ PERMISOS             │
+  │    estado            │          │ PK id_permiso        │
+  │    created_at        │          │    nombre            │
+  │    updated_at        │          │    estado            │
+  └──────────┬───────────┘          └──────────────────────┘
+             │
+             │ 1
+             │
+             ▼ N
+  ┌─────────────────────────────────────────────────────────────────────────────┐
+  │                          PROGRAMAS                                          │
+  └─────────────────────────────────────────────────────────────────────────────┘
+
+  TIPOS_PROGRAMA                    PROGRAMAS
+  ┌──────────────────────┐          ┌──────────────────────┐
+  │ PK id_tipo_programa  │   1  N   │ PK id_programa       │
+  │    nombre            │◄─────────│ FK id_tipo_programa  │
+  │    estado            │          │    nombre (UK)       │
+  │    created_at        │          │    descripcion       │
+  │    updated_at        │          │    estado            │
+  └──────────────────────┘          │    created_at        │
+                                    │    updated_at        │
+                                    └──────────┬───────────┘
+                                               │
+                                               │ 1
+                                               │
+                                               ▼ N
+                                    ┌──────────────────────┐
+                                    │ PROGRAMAS_VERSION    │
+                                    │ PK id_programa_ver.  │
+                                    │ FK id_programa       │
+                                    │    version           │
+                                    │    estado            │
+                                    │    created_at        │
+                                    │    updated_at        │
+                                    └──────────┬───────────┘
+                                               │
+                                               │ 1
+                                               │
+                                               ▼ N
+                                    ┌──────────────────────┐
+                                    │ PROGRAMA_VERSION_    │
+                                    │        EDICION       │
+                                    │ PK id_pve            │
+                                    │ FK id_programa_ver.  │
+                                    │    anio              │
+                                    │    cupo              │
+                                    │    estado            │
+                                    │    created_at        │
+                                    │    updated_at        │
+                                    └──────────┬───────────┘
+                                               │
+                                               │ 1
+                                               │
+                                               ▼ N
+                                    ┌──────────────────────┐
+                                    │ DETALLE_PROGRAMA_    │
+                                    │        ALUMNO        │
+                                    │ PK id_detalle_p_a    │
+                                    │ FK id_pve            │
+                                    │ FK id_alumno         │
+                                    │ FK id_modalidad_ac.  │
+                                    │ FK id_tipo_descuento │
+                                    │    descuento_aplic.  │
+                                    │    estado            │
+                                    │    fecha_inscripcion │
+                                    │    created_at        │
+                                    │    updated_at        │
+                                    └──────────┬───────────┘
+                                               │
+                                               │ 1
+                                               │
+                                               ▼ N
+                                    ┌──────────────────────┐
+                                    │ CONTROL_             │
+                                    │   DOCUMENTACION      │
+                                    │ PK id_ctrl_doc       │
+                                    │ FK id_detalle_p_a    │
+                                    │ FK id_requisito      │
+                                    │    url_documento     │
+                                    │    obligatorio       │
+                                    │    estado            │
+                                    │    fecha_entrega     │
+                                    │    fecha_revision    │
+                                    │    observaciones     │
+                                    │    created_at        │
+                                    │    updated_at        │
+                                    └──────────────────────┘
+
+
+  ┌─────────────────────────────────────────────────────────────────────────────┐
+  │                    MODALIDADES + REQUISITOS (M2M)                          │
+  └─────────────────────────────────────────────────────────────────────────────┘
+
+  MODALIDADES_ACADEMICAS            REQUISITOS
+  ┌──────────────────────┐          ┌──────────────────────┐
+  │ PK id_modalidad_ac.  │   N  N   │ PK id_requisito      │
+  │    nombre_modalidad  │◄────────►│    nombre (UK)       │
+  │    descripcion       │modalidad_│    descripcion       │
+  │    requiere_titulo   │ requisito│    imagen_url        │
+  │    estado            │          │    estado            │
+  │    created_at        │          │    created_at        │
+  │    updated_at        │          │    updated_at        │
+  └──────────┬───────────┘          └──────────┬───────────┘
+             │                                 │
+             │                                 │
+             │                                 │
+             │  N                              │  N
+             │                                 │
+             ▼ 1                               ▼ 1
+  ┌──────────────────────┐          ┌──────────────────────┐
+  │ MODALIDAD_REQUISITO  │          │ (FK a requisitos)    │
+  │ FK id_modalidad_ac.  │          │                      │
+  │ FK id_requisito      │          │                      │
+  │ PK compuesta         │          │                      │
+  └──────────────────────┘          └──────────────────────┘
+
+
+  ┌─────────────────────────────────────────────────────────────────────────────┐
+  │                      DESCUENTOS (M2M)                                       │
+  └─────────────────────────────────────────────────────────────────────────────┘
+
+  TIPOS_DESCUENTO
+  ┌──────────────────────┐
+  │ PK id_tipo_descuento │
+  │    nombre            │
+  │    descripcion       │
+  │    porcentaje        │
+  │    uso_unico         │
+  │    estado            │
+  │    created_at        │
+  │    updated_at        │
+  └──────┬──────────┬────┘
+         │          │
+         │ N        │ N
+         │          │
+         ▼ 1        ▼ 1
+  ┌────────────┐  ┌──────────────────────────┐
+  │ MODALIDAD_ │  │ TIPO_DESCUENTO_REQUISITO │
+  │ TIPO_      │  │ FK id_tipo_descuento     │
+  │ DESCUENTO  │  │ FK id_requisito          │
+  │ FK id_mod. │  └──────────────────────────┘
+  │ FK id_td   │
+  └────────────┘
+
+
+  ┌─────────────────────────────────────────────────────────────────────────────┐
+  │                    MODALIDADES <-> TIPOS PROGRAMA (M2M)                    │
+  └─────────────────────────────────────────────────────────────────────────────┘
+
+  MODALIDAD_TIPO_PROGRAMA
+  ┌──────────────────────┐
+  │ FK id_modalidad_ac.  │
+  │ FK id_tipo_programa  │
+  │ PK compuesta         │
+  └──────────────────────┘
+
+
+  ┌─────────────────────────────────────────────────────────────────────────────┐
+  │                         FLUJO DE INSCRIPCIÓN                               │
+  └─────────────────────────────────────────────────────────────────────────────┘
+
+  Alumno elige modalidad
+          │
+          ▼
+  Se crea DetalleProgramaAlumno (estado="postulante")
+          │
+          ▼
+  Se genera ControlDocumentacion por CADA requisito de esa modalidad
+          │
+          │  (query: JOIN Requisito ↔ ModalidadRequisito
+          │   filtrando por id_modalidad_academica)
+          │
+          ▼
+  Revisión: pendiente → entregado → aceptado/rechazado
+          │
+          ▼
+  Si TODOS los obligatorios = "aceptado" → estado = "inscrito"
