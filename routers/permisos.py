@@ -6,7 +6,7 @@ from schemas.admin import PermisoResponse
 from dependencies import get_current_user, require_permiso
 from schemas.auth import UserResponse
 
-router = APIRouter(prefix="/permisos", tags=["Permisos"])
+router = APIRouter(prefix="/permisos", tags=["Permisos"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("", response_model=list[PermisoResponse])

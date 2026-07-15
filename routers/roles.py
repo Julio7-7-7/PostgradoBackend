@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from database import get_db
@@ -11,7 +11,7 @@ from schemas.admin import RolCreate, RolUpdate, RolResponse, PermisoResponse, Ba
 from dependencies import get_current_user, require_permiso
 from schemas.auth import UserResponse
 
-router = APIRouter(prefix="/roles", tags=["Roles"])
+router = APIRouter(prefix="/roles", tags=["Roles"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("", response_model=list[RolResponse])

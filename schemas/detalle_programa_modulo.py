@@ -4,11 +4,7 @@ from enum import Enum
 from schemas.modulo import ModuloResponse
 from schemas.docente import DocenteResponse
 from schemas.contrataciones_docente import ContratacionDocenteResponse
-
-class ModalidadEnum(str, Enum):
-    presencial = "presencial"
-    virtual = "virtual"
-    semipresencial = "semipresencial"
+from schemas.enums import ModalidadEnum
 
 class EstadoDetalleEnum(str, Enum):
     programado = "programado"

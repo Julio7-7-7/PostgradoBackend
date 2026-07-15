@@ -1,11 +1,7 @@
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from datetime import datetime, date
 from enum import Enum
-
-class GeneroEnum(str, Enum):
-    masculino = "masculino"
-    femenino = "femenino"
-    otro = "otro"
+from schemas.enums import GeneroEnum
 
 class EstadoAlumnoEnum(str, Enum):
     activo = "activo"

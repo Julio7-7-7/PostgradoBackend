@@ -99,7 +99,7 @@ def editar(id: int, data: ControlDocumentacionUpdate, db: Session = Depends(get_
     return control
 
 @router.delete("/{id}", status_code=204)
-def eliminar(id: int, db: Session = Depends(get_db)):
+def eliminar(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("documentos.revisar"))):
     control = db.query(ControlDocumentacion).filter(
         ControlDocumentacion.id_control_documentacion == id
     ).first()
