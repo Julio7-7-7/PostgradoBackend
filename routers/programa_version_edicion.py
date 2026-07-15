@@ -14,6 +14,7 @@ from models.alumno import Alumno
 from models.control_documentacion import ControlDocumentacion
 from schemas.programa_version_edicion import ProgramaVersionEdicionCreate, ProgramaVersionEdicionUpdate, ProgramaVersionEdicionResponse
 from schemas.auth import UserResponse
+from routers.edition_state import actualizar_estado_edicion
 
 router = APIRouter(
     prefix="/programa-version-edicion",
@@ -132,37 +133,6 @@ def query_base(db):
         .joinedload(ProgramaVersion.programa)
         .joinedload(Programa.tipo_programa)
     )
-
-def actualizar_estado_edicion(id_edicion: int, db: Session) -> bool:
-    edicion = db.query(ProgramaVersionEdicion).filter(
-        ProgramaVersionEdicion.id_programa_version_edicion == id_edicion
-    ).first()
-    if not edicion:
-        return False
-
-    detalles = db.query(DetalleProgramaModulo).filter(
-        DetalleProgramaModulo.id_programa_version_edicion == id_edicion
-    ).all()
-    if not detalles:
-        return False
-
-    estados = [d.estado for d in detalles]
-
-    if all(e == "finalizado" for e in estados):
-        nuevo = "finalizado"
-    elif any(e == "reprogramado" for e in estados) and not any(e == "finalizado" for e in estados):
-        nuevo = "reprogramado"
-    elif any(e in ("en_curso", "reprogramado") for e in estados):
-        nuevo = "en_curso"
-    elif any(e == "finalizado" for e in estados):
-        nuevo = "en_curso"
-    else:
-        nuevo = "programado"
-
-    if edicion.estado != nuevo:
-        edicion.estado = nuevo
-        return True
-    return False
 
 @router.post("/", response_model=ProgramaVersionEdicionResponse, status_code=201)
 def crear(data: ProgramaVersionEdicionCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("ediciones.crear"))):

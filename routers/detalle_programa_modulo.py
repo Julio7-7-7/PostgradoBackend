@@ -14,6 +14,7 @@ from models.programa_version_edicion import ProgramaVersionEdicion
 from schemas.detalle_programa_modulo import DetalleProgramaModuloCreate, DetalleProgramaModuloUpdate, DetalleProgramaModuloResponse, ReordenarRequest
 from schemas.contrataciones_docente import ContratacionDocenteResponse
 from schemas.auth import UserResponse
+from routers.edition_state import actualizar_estado_edicion
 
 router = APIRouter(
     prefix="/detalle-programa-modulo",
@@ -116,37 +117,6 @@ def actualizar_estado_auto(detalle: DetalleProgramaModulo, db: Session) -> bool:
         actualizar_estado_edicion(detalle.id_programa_version_edicion, db)
         return True
 
-    return False
-
-def actualizar_estado_edicion(id_edicion: int, db: Session) -> bool:
-    edicion = db.query(ProgramaVersionEdicion).filter(
-        ProgramaVersionEdicion.id_programa_version_edicion == id_edicion
-    ).first()
-    if not edicion:
-        return False
-
-    detalles = db.query(DetalleProgramaModulo).filter(
-        DetalleProgramaModulo.id_programa_version_edicion == id_edicion
-    ).all()
-    if not detalles:
-        return False
-
-    estados = [d.estado for d in detalles]
-
-    if all(e == "finalizado" for e in estados):
-        nuevo = "finalizado"
-    elif any(e == "reprogramado" for e in estados) and not any(e == "finalizado" for e in estados):
-        nuevo = "reprogramado"
-    elif any(e in ("en_curso", "reprogramado") for e in estados):
-        nuevo = "en_curso"
-    elif any(e == "finalizado" for e in estados):
-        nuevo = "en_curso"
-    else:
-        nuevo = "programado"
-
-    if edicion.estado != nuevo:
-        edicion.estado = nuevo
-        return True
     return False
 
 @router.post("/", response_model=DetalleProgramaModuloResponse, status_code=201)

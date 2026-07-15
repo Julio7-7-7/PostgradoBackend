@@ -1,7 +1,6 @@
 from pydantic import BaseModel, field_validator, ConfigDict
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 from schemas.modalidad_academica import ModalidadAcademicaResponse
 from schemas.requisito import RequisitoResponse
 

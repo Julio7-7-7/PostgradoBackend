@@ -2,11 +2,7 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from datetime import datetime, date
 from enum import Enum
 from schemas.programa_version import ProgramaVersionResponse
-
-class ModalidadEnum(str, Enum):
-    presencial = "presencial"
-    virtual = "virtual"
-    semipresencial = "semipresencial"
+from schemas.enums import ModalidadEnum
 
 class EstadoEdicionEnum(str, Enum):
     programado = "programado"
