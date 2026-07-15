@@ -37,7 +37,6 @@ def crear(data: ModalidadAcademicaCreate, db: Session = Depends(get_db), current
     nueva = ModalidadAcademica(
         nombre_modalidad=data.nombre_modalidad,
         descripcion=data.descripcion,
-        requiere_titulo=data.requiere_titulo,
         estado=data.estado,
     )
     db.add(nueva)

@@ -179,6 +179,7 @@ def seed():
         {"nombre": "Fotocopia de Carnet", "descripcion": "Fotocopia simple del carnet de identidad vigente"},
         {"nombre": "Boleta de GRL", "descripcion": "Boleta de pago del Gobierno Regional de La Paz"},
         {"nombre": "Avance Académico de la UAGRM", "descripcion": "Avance académico emitido por la Universidad Autónoma Gabriel René Moreno"},
+        {"nombre": "Título de Profesional", "descripcion": "Copia del título profesional o certificado de otorgamiento de título"},
     ]
     requisitos_objs = {}
     for req in requisitos_data:
@@ -224,7 +225,6 @@ def seed():
         modalidad_profesionales = ModalidadAcademica(
             nombre_modalidad="Profesionales",
             descripcion="Modalidad de formación profesional con título oficial",
-            requiere_titulo=True,
             estado="activo",
         )
         db.add(modalidad_profesionales)
@@ -234,7 +234,7 @@ def seed():
     else:
         print(f"  🔄 Modalidad: {modalidad_profesionales.nombre_modalidad}")
 
-    requisitos_prof = ["Avance Académico de la UAGRM"]
+    requisitos_prof = ["Avance Académico de la UAGRM", "Título de Profesional"]
     for nombre_req in requisitos_prof:
         req_obj = requisitos_objs[nombre_req]
         vinculo = db.query(ModalidadRequisito).filter(

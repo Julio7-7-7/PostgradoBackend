@@ -10,7 +10,6 @@ class EstadoModalidadAcademicaEnum(str, Enum):
 class ModalidadAcademicaBase(BaseModel):
     nombre_modalidad: str
     descripcion: str | None = None
-    requiere_titulo: bool = False
     estado: EstadoModalidadAcademicaEnum = EstadoModalidadAcademicaEnum.activo
 
     @field_validator("nombre_modalidad")
@@ -28,7 +27,6 @@ class ModalidadAcademicaCreate(ModalidadAcademicaBase):
 class ModalidadAcademicaUpdate(BaseModel):
     nombre_modalidad: str | None = None
     descripcion: str | None = None
-    requiere_titulo: bool | None = None
     estado: EstadoModalidadAcademicaEnum | None = None
     requisitos: list[int] | None = None
 
