@@ -1,6 +1,11 @@
+from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, field_validator
 from datetime import datetime
 from enum import Enum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from schemas.requisito import RequisitoResponse
 
 class EstadoModalidadAcademicaEnum(str, Enum):
     activo = "activo"
@@ -22,16 +27,18 @@ class ModalidadAcademicaBase(BaseModel):
         return v.strip().title()
 
 class ModalidadAcademicaCreate(ModalidadAcademicaBase):
-    pass
+    requisitos: list[int] = []
 
 class ModalidadAcademicaUpdate(BaseModel):
     nombre_modalidad: str | None = None
     descripcion: str | None = None
     requiere_titulo: bool | None = None
     estado: EstadoModalidadAcademicaEnum | None = None
+    requisitos: list[int] | None = None
 
 class ModalidadAcademicaResponse(ModalidadAcademicaBase):
     id_modalidad_academica: int
+    requisitos: list[RequisitoResponse] = []
     created_at: datetime
     updated_at: datetime
 
