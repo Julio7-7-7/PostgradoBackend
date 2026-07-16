@@ -126,6 +126,16 @@ def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db), curr
                     detail=f"El alumno ya utilizó el beneficio '{tipo_descuento.nombre}' anteriormente"
                 )
 
+        vinculo = db.query(ModalidadTipoDescuento).filter(
+            ModalidadTipoDescuento.id_modalidad_academica == data.id_modalidad_academica,
+            ModalidadTipoDescuento.id_tipo_descuento == data.id_tipo_descuento,
+        ).first()
+        if not vinculo:
+            raise HTTPException(
+                status_code=400,
+                detail=f"El descuento '{tipo_descuento.nombre}' no está disponible para esta modalidad"
+            )
+
     nuevo = DetalleProgramaAlumno(**data.model_dump())
     nuevo.descuento_aplicado = descuento_aplicado
     db.add(nuevo)
@@ -195,6 +205,16 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
                     status_code=400,
                     detail=f"Ya utilizaste el beneficio '{tipo_descuento.nombre}' anteriormente"
                 )
+
+        vinculo = db.query(ModalidadTipoDescuento).filter(
+            ModalidadTipoDescuento.id_modalidad_academica == data.id_modalidad_academica,
+            ModalidadTipoDescuento.id_tipo_descuento == data.id_tipo_descuento,
+        ).first()
+        if not vinculo:
+            raise HTTPException(
+                status_code=400,
+                detail=f"El descuento '{tipo_descuento.nombre}' no está disponible para esta modalidad"
+            )
 
     from datetime import date
     nuevo = DetalleProgramaAlumno(

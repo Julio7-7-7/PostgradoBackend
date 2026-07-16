@@ -50,6 +50,7 @@ def crear(data: TipoDescuentoCreate, db: Session = Depends(get_db), current_user
         nombre=data.nombre,
         porcentaje=data.porcentaje,
         descripcion=data.descripcion,
+        uso_unico=data.uso_unico,
         estado=data.estado,
     )
     db.add(nuevo)
@@ -105,10 +106,14 @@ def editar(id: int, data: TipoDescuentoUpdate, db: Session = Depends(get_db), cu
     ).first()
 
 
-@router.delete("/{id}", status_code=204)
-def eliminar(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("tipos_descuento.editar"))):
+@router.patch("/{id}/cambiar-estado")
+def cambiar_estado(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("tipos_descuento.editar"))):
     tipo = db.query(TipoDescuento).filter(TipoDescuento.id_tipo_descuento == id).first()
     if not tipo:
         raise HTTPException(status_code=404, detail="No encontrado")
-    db.delete(tipo)
+    tipo.estado = "inactivo" if tipo.estado == "activo" else "activo"
     db.commit()
+    db.refresh(tipo)
+    return _cargar_con_relations(
+        db.query(TipoDescuento).filter(TipoDescuento.id_tipo_descuento == id)
+    ).first()
