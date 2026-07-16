@@ -1,5 +1,5 @@
 from database import SessionLocal
-from models import Rol, Permiso, RolesPermiso, ModalidadAcademica, Requisito, Usuario, UsuarioRol, Alumno, Docente, Administrativo, TipoPrograma
+from models import Rol, Permiso, RolesPermiso, ModalidadAcademica, Requisito, Usuario, UsuarioRol, Alumno, Docente, Administrativo, TipoPrograma, ModalidadRequisito
 from models.tipo_descuento import TipoDescuento
 from models.modalidad_tipo_descuento import ModalidadTipoDescuento
 from models.tipo_descuento_requisito import TipoDescuentoRequisito
@@ -179,24 +179,44 @@ def seed():
         {"nombre": "Fotocopia de Carnet", "descripcion": "Fotocopia simple del carnet de identidad vigente"},
         {"nombre": "Boleta de GRL", "descripcion": "Boleta de pago del Gobierno Regional de La Paz"},
         {"nombre": "Avance Académico de la UAGRM", "descripcion": "Avance académico emitido por la Universidad Autónoma Gabriel René Moreno"},
+        {"nombre": "Título de Profesional", "descripcion": "Copia del título profesional o certificado de otorgamiento de título"},
     ]
+    requisitos_objs = {}
     for req in requisitos_data:
-        existente = db.query(Requisito).filter(
-            Requisito.nombre == req["nombre"],
-            Requisito.id_modalidad_academica == modalidad_ed_continua.id_modalidad_academica,
-        ).first()
+        existente = db.query(Requisito).filter(Requisito.nombre == req["nombre"]).first()
         if not existente:
             req_obj = Requisito(
                 nombre=req["nombre"],
-                id_modalidad_academica=modalidad_ed_continua.id_modalidad_academica,
                 descripcion=req["descripcion"],
                 estado="activo",
             )
             db.add(req_obj)
             db.commit()
+            db.refresh(req_obj)
+            requisitos_objs[req["nombre"]] = req_obj
             print(f"    ✅ Requisito: {req['nombre']}")
         else:
+            requisitos_objs[req["nombre"]] = existente
             print(f"    🔄 Requisito: {existente.nombre}")
+
+    vinculos_ed_continua = [
+        "Fotocopia de Carnet", "Boleta de GRL", "Avance Académico de la UAGRM"
+    ]
+    for nombre_req in vinculos_ed_continua:
+        req_obj = requisitos_objs[nombre_req]
+        vinculo = db.query(ModalidadRequisito).filter(
+            ModalidadRequisito.id_modalidad_academica == modalidad_ed_continua.id_modalidad_academica,
+            ModalidadRequisito.id_requisito == req_obj.id_requisito,
+        ).first()
+        if not vinculo:
+            db.add(ModalidadRequisito(
+                id_modalidad_academica=modalidad_ed_continua.id_modalidad_academica,
+                id_requisito=req_obj.id_requisito,
+            ))
+            db.commit()
+            print(f"    ✅ {nombre_req} → Educación Continua")
+        else:
+            print(f"    🔄 {nombre_req} → Educación Continua ya vinculado")
 
     modalidad_profesionales = db.query(ModalidadAcademica).filter(
         ModalidadAcademica.nombre_modalidad == "Profesionales"
@@ -205,7 +225,6 @@ def seed():
         modalidad_profesionales = ModalidadAcademica(
             nombre_modalidad="Profesionales",
             descripcion="Modalidad de formación profesional con título oficial",
-            requiere_titulo=True,
             estado="activo",
         )
         db.add(modalidad_profesionales)
@@ -215,26 +234,22 @@ def seed():
     else:
         print(f"  🔄 Modalidad: {modalidad_profesionales.nombre_modalidad}")
 
-    requisitos_prof = [
-        {"nombre": "Avance Académico de la UAGRM", "descripcion": "Avance académico emitido por la UAGRM"},
-    ]
-    for req in requisitos_prof:
-        existente = db.query(Requisito).filter(
-            Requisito.nombre == req["nombre"],
-            Requisito.id_modalidad_academica == modalidad_profesionales.id_modalidad_academica,
+    requisitos_prof = ["Avance Académico de la UAGRM", "Título de Profesional"]
+    for nombre_req in requisitos_prof:
+        req_obj = requisitos_objs[nombre_req]
+        vinculo = db.query(ModalidadRequisito).filter(
+            ModalidadRequisito.id_modalidad_academica == modalidad_profesionales.id_modalidad_academica,
+            ModalidadRequisito.id_requisito == req_obj.id_requisito,
         ).first()
-        if not existente:
-            req_obj = Requisito(
-                nombre=req["nombre"],
+        if not vinculo:
+            db.add(ModalidadRequisito(
                 id_modalidad_academica=modalidad_profesionales.id_modalidad_academica,
-                descripcion=req["descripcion"],
-                estado="activo",
-            )
-            db.add(req_obj)
+                id_requisito=req_obj.id_requisito,
+            ))
             db.commit()
-            print(f"    ✅ Requisito: {req['nombre']}")
+            print(f"    ✅ {nombre_req} → Profesionales")
         else:
-            print(f"    🔄 Requisito: {existente.nombre}")
+            print(f"    🔄 {nombre_req} → Profesionales ya vinculado")
 
     requisito_beca = db.query(Requisito).filter(
         Requisito.nombre == "Media Beca UAGRM"
@@ -242,9 +257,7 @@ def seed():
     if not requisito_beca:
         requisito_beca = Requisito(
             nombre="Media Beca UAGRM",
-            id_modalidad_academica=None,
             descripcion="Documento que acredita media beca de la Universidad Autónoma Gabriel René Moreno",
-            obligatorio=False,
             estado="activo",
         )
         db.add(requisito_beca)

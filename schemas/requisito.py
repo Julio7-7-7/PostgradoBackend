@@ -1,18 +1,15 @@
 from pydantic import BaseModel, ConfigDict, field_validator
 from datetime import datetime
 from enum import Enum
-from typing import Optional
-from schemas.modalidad_academica import ModalidadAcademicaResponse
 
 class EstadoRequisitoEnum(str, Enum):
     activo = "activo"
     inactivo = "inactivo"
 
 class RequisitoBase(BaseModel):
-    id_modalidad_academica: int | None = None
     nombre: str
     descripcion: str | None = None
-    obligatorio: bool = True
+    imagen_url: str | None = None
     estado: EstadoRequisitoEnum = EstadoRequisitoEnum.activo
 
     @field_validator("nombre")
@@ -28,15 +25,13 @@ class RequisitoCreate(RequisitoBase):
     pass
 
 class RequisitoUpdate(BaseModel):
-    id_modalidad_academica: int | None = None
     nombre: str | None = None
     descripcion: str | None = None
-    obligatorio: bool | None = None
+    imagen_url: str | None = None
     estado: EstadoRequisitoEnum | None = None
 
 class RequisitoResponse(RequisitoBase):
     id_requisito: int
-    modalidad_academica: Optional[ModalidadAcademicaResponse] = None
     created_at: datetime
     updated_at: datetime
 

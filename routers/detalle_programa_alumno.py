@@ -21,8 +21,15 @@ router = APIRouter(
 )
 
 def generar_control_documentacion(id_detalle: int, id_modalidad_academica: int, db: Session):
+    from models.modalidad_requisito import ModalidadRequisito
+    vinculos = db.query(ModalidadRequisito).filter(
+        ModalidadRequisito.id_modalidad_academica == id_modalidad_academica,
+    ).all()
+    requisito_ids = [v.id_requisito for v in vinculos]
+    if not requisito_ids:
+        return
     requisitos = db.query(Requisito).filter(
-        Requisito.id_modalidad_academica == id_modalidad_academica,
+        Requisito.id_requisito.in_(requisito_ids),
         Requisito.estado == "activo"
     ).all()
     for requisito in requisitos:
@@ -30,7 +37,7 @@ def generar_control_documentacion(id_detalle: int, id_modalidad_academica: int, 
             id_detalle_programa_alumno=id_detalle,
             id_requisito=requisito.id_requisito,
             estado="pendiente",
-            obligatorio=requisito.obligatorio
+            obligatorio=True
         )
         db.add(control)
     db.commit()
