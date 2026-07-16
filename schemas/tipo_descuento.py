@@ -31,16 +31,8 @@ class TipoDescuentoBase(BaseModel):
         return v
 
 class TipoDescuentoCreate(TipoDescuentoBase):
-    nombre: str
     modalidades: list[int] = []
     requisitos: list[int] = []
-
-    @field_validator("nombre")
-    @classmethod
-    def validar_nombre_longitud(cls, v):
-        if len(v.strip()) > 100:
-            raise ValueError("El nombre no puede exceder 100 caracteres")
-        return v.strip().title()
 
 class TipoDescuentoUpdate(BaseModel):
     nombre: str | None = None

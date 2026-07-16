@@ -20,6 +20,7 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)]
 )
 
+
 def generar_control_documentacion(id_detalle: int, id_modalidad_academica: int, db: Session):
     from models.modalidad_requisito import ModalidadRequisito
     vinculos = db.query(ModalidadRequisito).filter(
@@ -73,6 +74,24 @@ def generar_control_descuento(id_detalle: int, id_modalidad_academica: int, id_t
     db.commit()
 
 
+def limpiar_control_descuento(id_detalle: int, id_tipo_descuento: int, db: Session):
+    tipo_desc = db.query(TipoDescuento).filter(
+        TipoDescuento.id_tipo_descuento == id_tipo_descuento
+    ).first()
+    if not tipo_desc:
+        return
+    requisito_ids = [r.id_requisito for r in tipo_desc.requisitos]
+    if not requisito_ids:
+        return
+    controles = db.query(ControlDocumentacion).filter(
+        ControlDocumentacion.id_detalle_programa_alumno == id_detalle,
+        ControlDocumentacion.id_requisito.in_(requisito_ids),
+    ).all()
+    for ctrl in controles:
+        ctrl.obligatorio = False
+    db.commit()
+
+
 def validar_modalidad_programa(id_modalidad_academica: int, id_programa_version_edicion: int, db: Session):
     pv = db.query(ProgramaVersionEdicion).filter(
         ProgramaVersionEdicion.id_programa_version_edicion == id_programa_version_edicion
@@ -95,6 +114,39 @@ def validar_modalidad_programa(id_modalidad_academica: int, id_programa_version_
         )
 
 
+def _validar_descuento(id_tipo_descuento: int, id_modalidad_academica: int, id_alumno: int, db: Session):
+    tipo_descuento = db.query(TipoDescuento).filter(
+        TipoDescuento.id_tipo_descuento == id_tipo_descuento,
+        TipoDescuento.estado == "activo"
+    ).first()
+    if not tipo_descuento:
+        raise HTTPException(status_code=404, detail="Tipo de descuento no encontrado o inactivo")
+
+    if tipo_descuento.uso_unico:
+        usado = db.query(DetalleProgramaAlumno).filter(
+            DetalleProgramaAlumno.id_alumno == id_alumno,
+            DetalleProgramaAlumno.id_tipo_descuento == id_tipo_descuento,
+            DetalleProgramaAlumno.estado.notin_(["postulante", "observado"])
+        ).with_for_update().first()
+        if usado:
+            raise HTTPException(
+                status_code=400,
+                detail=f"El alumno ya utilizó el beneficio '{tipo_descuento.nombre}' anteriormente"
+            )
+
+    vinculo = db.query(ModalidadTipoDescuento).filter(
+        ModalidadTipoDescuento.id_modalidad_academica == id_modalidad_academica,
+        ModalidadTipoDescuento.id_tipo_descuento == id_tipo_descuento,
+    ).first()
+    if not vinculo:
+        raise HTTPException(
+            status_code=400,
+            detail=f"El descuento '{tipo_descuento.nombre}' no está disponible para esta modalidad"
+        )
+
+    return tipo_descuento
+
+
 @router.post("/", response_model=DetalleProgramaAlumnoResponse, status_code=201)
 def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.crear"))):
     modalidad = db.query(ModalidadAcademica).filter(
@@ -102,39 +154,25 @@ def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db), curr
     ).first()
     if not modalidad:
         raise HTTPException(status_code=404, detail="Modalidad académica no encontrada")
+    if modalidad.estado != "activo":
+        raise HTTPException(status_code=400, detail="La modalidad académica no está activa")
 
     validar_modalidad_programa(data.id_modalidad_academica, data.id_programa_version_edicion, db)
 
+    existente = db.query(DetalleProgramaAlumno).filter(
+        DetalleProgramaAlumno.id_alumno == data.id_alumno,
+        DetalleProgramaAlumno.id_programa_version_edicion == data.id_programa_version_edicion,
+    ).first()
+    if existente:
+        raise HTTPException(
+            status_code=400,
+            detail="El alumno ya está inscrito en esta edición del programa"
+        )
+
     descuento_aplicado = 0.0
     if data.id_tipo_descuento:
-        tipo_descuento = db.query(TipoDescuento).filter(
-            TipoDescuento.id_tipo_descuento == data.id_tipo_descuento
-        ).first()
-        if not tipo_descuento:
-            raise HTTPException(status_code=404, detail="Tipo de descuento no encontrado")
-        descuento_aplicado = tipo_descuento.porcentaje
-
-        if tipo_descuento.uso_unico:
-            usado = db.query(DetalleProgramaAlumno).filter(
-                DetalleProgramaAlumno.id_alumno == data.id_alumno,
-                DetalleProgramaAlumno.id_tipo_descuento == data.id_tipo_descuento,
-                DetalleProgramaAlumno.estado.notin_(["postulante", "observado"])
-            ).first()
-            if usado:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"El alumno ya utilizó el beneficio '{tipo_descuento.nombre}' anteriormente"
-                )
-
-        vinculo = db.query(ModalidadTipoDescuento).filter(
-            ModalidadTipoDescuento.id_modalidad_academica == data.id_modalidad_academica,
-            ModalidadTipoDescuento.id_tipo_descuento == data.id_tipo_descuento,
-        ).first()
-        if not vinculo:
-            raise HTTPException(
-                status_code=400,
-                detail=f"El descuento '{tipo_descuento.nombre}' no está disponible para esta modalidad"
-            )
+        td = _validar_descuento(data.id_tipo_descuento, data.id_modalidad_academica, data.id_alumno, db)
+        descuento_aplicado = td.porcentaje
 
     nuevo = DetalleProgramaAlumno(**data.model_dump())
     nuevo.descuento_aplicado = descuento_aplicado
@@ -186,35 +224,8 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
 
     descuento_aplicado = 0.0
     if data.id_tipo_descuento:
-        tipo_descuento = db.query(TipoDescuento).filter(
-            TipoDescuento.id_tipo_descuento == data.id_tipo_descuento,
-            TipoDescuento.estado == "activo"
-        ).first()
-        if not tipo_descuento:
-            raise HTTPException(status_code=404, detail="Tipo de descuento no encontrado o inactivo")
-        descuento_aplicado = tipo_descuento.porcentaje
-
-        if tipo_descuento.uso_unico:
-            usado = db.query(DetalleProgramaAlumno).filter(
-                DetalleProgramaAlumno.id_alumno == current_user.id_profile,
-                DetalleProgramaAlumno.id_tipo_descuento == data.id_tipo_descuento,
-                DetalleProgramaAlumno.estado.notin_(["postulante", "observado"])
-            ).first()
-            if usado:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Ya utilizaste el beneficio '{tipo_descuento.nombre}' anteriormente"
-                )
-
-        vinculo = db.query(ModalidadTipoDescuento).filter(
-            ModalidadTipoDescuento.id_modalidad_academica == data.id_modalidad_academica,
-            ModalidadTipoDescuento.id_tipo_descuento == data.id_tipo_descuento,
-        ).first()
-        if not vinculo:
-            raise HTTPException(
-                status_code=400,
-                detail=f"El descuento '{tipo_descuento.nombre}' no está disponible para esta modalidad"
-            )
+        td = _validar_descuento(data.id_tipo_descuento, data.id_modalidad_academica, current_user.id_profile, db)
+        descuento_aplicado = td.porcentaje
 
     from datetime import date
     nuevo = DetalleProgramaAlumno(
@@ -260,17 +271,25 @@ def editar(id: int, data: DetalleProgramaAlumnoUpdate, db: Session = Depends(get
     if not detalle:
         raise HTTPException(status_code=404, detail="No encontrado")
 
-    if data.id_tipo_descuento:
-        tipo_descuento = db.query(TipoDescuento).filter(
-            TipoDescuento.id_tipo_descuento == data.id_tipo_descuento
-        ).first()
-        if not tipo_descuento:
-            raise HTTPException(status_code=404, detail="Tipo de descuento no encontrado")
-        data.descuento_aplicado = tipo_descuento.porcentaje
+    descuento_cambio = False
+    if data.id_tipo_descuento is not None and data.id_tipo_descuento != detalle.id_tipo_descuento:
+        descuento_cambio = True
+        if data.id_tipo_descuento:
+            td = _validar_descuento(data.id_tipo_descuento, detalle.id_modalidad_academica, detalle.id_alumno, db)
+            data.descuento_aplicado = td.porcentaje
+        else:
+            data.descuento_aplicado = 0.0
 
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(detalle, key, value)
     db.commit()
+
+    if descuento_cambio:
+        if detalle.id_tipo_descuento:
+            generar_control_descuento(detalle.id_detalle_programa_alumno, detalle.id_modalidad_academica, detalle.id_tipo_descuento, db)
+        else:
+            limpiar_control_descuento(detalle.id_detalle_programa_alumno, data.id_tipo_descuento if data.id_tipo_descuento else detalle.id_tipo_descuento, db)
+
     db.refresh(detalle)
     return detalle
 

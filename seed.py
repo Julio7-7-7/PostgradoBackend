@@ -52,7 +52,7 @@ def seed():
         "tipos_programa.ver", "tipos_programa.crear", "tipos_programa.editar",
         "modalidades_academicas.ver", "modalidades_academicas.crear", "modalidades_academicas.editar",
         "requisitos.ver", "requisitos.crear", "requisitos.editar", "requisitos.eliminar",
-        "tipos_descuento.ver", "tipos_descuento.crear", "tipos_descuento.editar", "tipos_descuento.eliminar",
+        "tipos_descuento.ver", "tipos_descuento.crear", "tipos_descuento.editar",
 
         "historial.ver",
         "notas.subir", "notas.ver", "notas.aprobar",
@@ -77,7 +77,7 @@ def seed():
             "tipos_programa.ver", "tipos_programa.crear", "tipos_programa.editar",
             "modalidades_academicas.ver", "modalidades_academicas.crear", "modalidades_academicas.editar",
             "requisitos.ver", "requisitos.crear", "requisitos.editar", "requisitos.eliminar",
-            "tipos_descuento.ver", "tipos_descuento.crear", "tipos_descuento.editar", "tipos_descuento.eliminar",
+            "tipos_descuento.ver", "tipos_descuento.crear", "tipos_descuento.editar",
             "historial.ver",
         ],
 

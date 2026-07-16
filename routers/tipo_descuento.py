@@ -25,12 +25,20 @@ def _sincronizar(tipo: TipoDescuento, modalidades_ids: list[int], requisitos_ids
         modalidades = db.query(ModalidadAcademica).filter(
             ModalidadAcademica.id_modalidad_academica.in_(modalidades_ids)
         ).all()
+        encontrados = {m.id_modalidad_academica for m in modalidades}
+        faltantes = set(modalidades_ids) - encontrados
+        if faltantes:
+            raise HTTPException(status_code=400, detail=f"Modalidades no encontradas: {sorted(faltantes)}")
         tipo.modalidades = modalidades
 
     if requisitos_ids is not None:
         requisitos = db.query(Requisito).filter(
             Requisito.id_requisito.in_(requisitos_ids)
         ).all()
+        encontrados = {r.id_requisito for r in requisitos}
+        faltantes = set(requisitos_ids) - encontrados
+        if faltantes:
+            raise HTTPException(status_code=400, detail=f"Requisitos no encontrados: {sorted(faltantes)}")
         tipo.requisitos = requisitos
 
     db.commit()
