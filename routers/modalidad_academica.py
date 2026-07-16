@@ -23,6 +23,10 @@ def _sincronizar_requisitos(modalidad: ModalidadAcademica, requisitos_ids: list[
         requisitos = db.query(Requisito).filter(
             Requisito.id_requisito.in_(requisitos_ids)
         ).all()
+        encontrados = {r.id_requisito for r in requisitos}
+        faltantes = set(requisitos_ids) - encontrados
+        if faltantes:
+            raise HTTPException(status_code=400, detail=f"Requisitos no encontrados: {sorted(faltantes)}")
         modalidad.requisitos = requisitos
 
 

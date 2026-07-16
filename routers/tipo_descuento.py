@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from dependencies import get_current_user, require_permiso
@@ -41,18 +42,12 @@ def _sincronizar(tipo: TipoDescuento, modalidades_ids: list[int], requisitos_ids
             raise HTTPException(status_code=400, detail=f"Requisitos no encontrados: {sorted(faltantes)}")
         tipo.requisitos = requisitos
 
-    db.commit()
-    db.refresh(tipo)
-
 
 @router.post("/", response_model=TipoDescuentoResponse, status_code=201)
 def crear(data: TipoDescuentoCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("tipos_descuento.crear"))):
     existente = db.query(TipoDescuento).filter(TipoDescuento.nombre == data.nombre).first()
     if existente:
         raise HTTPException(status_code=400, detail="Ya existe un tipo de descuento con ese nombre")
-
-    modalidades_ids = data.modalidades
-    requisitos_ids = data.requisitos
 
     nuevo = TipoDescuento(
         nombre=data.nombre,
@@ -62,10 +57,15 @@ def crear(data: TipoDescuentoCreate, db: Session = Depends(get_db), current_user
         estado=data.estado,
     )
     db.add(nuevo)
-    db.commit()
-    db.refresh(nuevo)
+    db.flush()
 
-    _sincronizar(nuevo, modalidades_ids, requisitos_ids, db)
+    _sincronizar(nuevo, data.modalidades, data.requisitos, db)
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Error de integridad al guardar")
 
     return _cargar_con_relations(
         db.query(TipoDescuento).filter(TipoDescuento.id_tipo_descuento == nuevo.id_tipo_descuento)
@@ -105,9 +105,14 @@ def editar(id: int, data: TipoDescuentoUpdate, db: Session = Depends(get_db), cu
 
     for key, value in data.model_dump(exclude_unset=True, exclude={"modalidades", "requisitos"}).items():
         setattr(tipo, key, value)
-    db.commit()
 
     _sincronizar(tipo, data.modalidades, data.requisitos, db)
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Error de integridad al guardar")
 
     return _cargar_con_relations(
         db.query(TipoDescuento).filter(TipoDescuento.id_tipo_descuento == id)

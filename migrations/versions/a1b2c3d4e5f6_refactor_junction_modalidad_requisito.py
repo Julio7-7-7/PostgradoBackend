@@ -24,8 +24,8 @@ def upgrade() -> None:
         sa.Column('id_modalidad_academica', sa.Integer(), nullable=False),
         sa.Column('id_requisito', sa.Integer(), nullable=False),
         sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
-        sa.ForeignKeyConstraint(['id_modalidad_academica'], ['modalidades_academicas.id_modalidad_academica'], ondelete='CASCADE'),
-        sa.ForeignKeyConstraint(['id_requisito'], ['requisitos.id_requisito'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['id_modalidad_academica'], ['modalidades_academicas.id_modalidad_academica']),
+        sa.ForeignKeyConstraint(['id_requisito'], ['requisitos.id_requisito']),
         sa.PrimaryKeyConstraint('id_modalidad_academica', 'id_requisito')
     )
 

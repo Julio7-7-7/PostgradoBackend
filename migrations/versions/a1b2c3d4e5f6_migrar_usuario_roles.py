@@ -17,8 +17,8 @@ depends_on = None
 def upgrade() -> None:
     op.create_table(
         'usuario_roles',
-        sa.Column('id_usuario', sa.Integer(), sa.ForeignKey('usuarios.id_usuario', ondelete='CASCADE'), primary_key=True),
-        sa.Column('id_rol', sa.Integer(), sa.ForeignKey('roles.id_rol', ondelete='CASCADE'), primary_key=True),
+        sa.Column('id_usuario', sa.Integer(), sa.ForeignKey('usuarios.id_usuario'), primary_key=True),
+        sa.Column('id_rol', sa.Integer(), sa.ForeignKey('roles.id_rol'), primary_key=True),
         sa.Column('rol_activo', sa.Boolean(), server_default=sa.text('false'), nullable=False),
         sa.Column('created_at', sa.DateTime(), server_default=sa.func.now(), nullable=False),
     )

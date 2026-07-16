@@ -8,12 +8,12 @@ class TipoDescuentoRequisito(Base):
 
     id_tipo_descuento = Column(
         Integer,
-        ForeignKey("tipos_descuento.id_tipo_descuento", ondelete="CASCADE"),
+        ForeignKey("tipos_descuento.id_tipo_descuento"),
         primary_key=True,
     )
     id_requisito = Column(
         Integer,
-        ForeignKey("requisitos.id_requisito", ondelete="CASCADE"),
+        ForeignKey("requisitos.id_requisito"),
         primary_key=True,
     )
     created_at = Column(DateTime, server_default=func.now(), nullable=False)

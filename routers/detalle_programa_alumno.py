@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from dependencies import get_current_user, require_permiso
 from models.detalle_programa_alumno import DetalleProgramaAlumno
@@ -41,7 +41,6 @@ def generar_control_documentacion(id_detalle: int, id_modalidad_academica: int, 
             obligatorio=True
         )
         db.add(control)
-    db.commit()
 
 
 def generar_control_descuento(id_detalle: int, id_modalidad_academica: int, id_tipo_descuento: int, db: Session):
@@ -52,7 +51,9 @@ def generar_control_descuento(id_detalle: int, id_modalidad_academica: int, id_t
     if not vinculo:
         return
 
-    tipo_desc = db.query(TipoDescuento).filter(
+    tipo_desc = db.query(TipoDescuento).options(
+        joinedload(TipoDescuento.requisitos)
+    ).filter(
         TipoDescuento.id_tipo_descuento == id_tipo_descuento
     ).first()
 
@@ -71,11 +72,12 @@ def generar_control_descuento(id_detalle: int, id_modalidad_academica: int, id_t
                 obligatorio=True,
             )
             db.add(control)
-    db.commit()
 
 
 def limpiar_control_descuento(id_detalle: int, id_tipo_descuento: int, db: Session):
-    tipo_desc = db.query(TipoDescuento).filter(
+    tipo_desc = db.query(TipoDescuento).options(
+        joinedload(TipoDescuento.requisitos)
+    ).filter(
         TipoDescuento.id_tipo_descuento == id_tipo_descuento
     ).first()
     if not tipo_desc:
@@ -89,7 +91,6 @@ def limpiar_control_descuento(id_detalle: int, id_tipo_descuento: int, db: Sessi
     ).all()
     for ctrl in controles:
         ctrl.obligatorio = False
-    db.commit()
 
 
 def validar_modalidad_programa(id_modalidad_academica: int, id_programa_version_edicion: int, db: Session):
@@ -106,7 +107,10 @@ def validar_modalidad_programa(id_modalidad_academica: int, id_programa_version_
         ModalidadTipoPrograma.id_tipo_programa == id_tipo_programa,
     ).first()
     if not vinculo:
-        nombre_modalidad = db.query(ModalidadAcademica).get(id_modalidad_academica).nombre_modalidad
+        modalidad = db.query(ModalidadAcademica).filter(
+            ModalidadAcademica.id_modalidad_academica == id_modalidad_academica
+        ).first()
+        nombre_modalidad = modalidad.nombre_modalidad if modalidad else str(id_modalidad_academica)
         nombre_tipo = pv.programa_version.programa.tipo_programa.nombre
         raise HTTPException(
             status_code=400,
@@ -177,14 +181,14 @@ def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db), curr
     nuevo = DetalleProgramaAlumno(**data.model_dump())
     nuevo.descuento_aplicado = descuento_aplicado
     db.add(nuevo)
-    db.commit()
-    db.refresh(nuevo)
+    db.flush()
 
     generar_control_documentacion(nuevo.id_detalle_programa_alumno, data.id_modalidad_academica, db)
 
     if data.id_tipo_descuento:
         generar_control_descuento(nuevo.id_detalle_programa_alumno, data.id_modalidad_academica, data.id_tipo_descuento, db)
 
+    db.commit()
     db.refresh(nuevo)
     return nuevo
 
@@ -238,14 +242,14 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
         fecha_inscripcion=date.today(),
     )
     db.add(nuevo)
-    db.commit()
-    db.refresh(nuevo)
+    db.flush()
 
     generar_control_documentacion(nuevo.id_detalle_programa_alumno, data.id_modalidad_academica, db)
 
     if data.id_tipo_descuento:
         generar_control_descuento(nuevo.id_detalle_programa_alumno, data.id_modalidad_academica, data.id_tipo_descuento, db)
 
+    db.commit()
     db.refresh(nuevo)
     return nuevo
 
@@ -271,25 +275,27 @@ def editar(id: int, data: DetalleProgramaAlumnoUpdate, db: Session = Depends(get
     if not detalle:
         raise HTTPException(status_code=404, detail="No encontrado")
 
-    descuento_cambio = False
-    if data.id_tipo_descuento is not None and data.id_tipo_descuento != detalle.id_tipo_descuento:
-        descuento_cambio = True
-        if data.id_tipo_descuento:
-            td = _validar_descuento(data.id_tipo_descuento, detalle.id_modalidad_academica, detalle.id_alumno, db)
+    old_id_tipo_descuento = detalle.id_tipo_descuento
+    new_id_tipo_descuento = data.id_tipo_descuento if "id_tipo_descuento" in data.model_fields_set else None
+    descuento_cambio = new_id_tipo_descuento is not None and new_id_tipo_descuento != old_id_tipo_descuento
+
+    if descuento_cambio:
+        if new_id_tipo_descuento:
+            td = _validar_descuento(new_id_tipo_descuento, detalle.id_modalidad_academica, detalle.id_alumno, db)
             data.descuento_aplicado = td.porcentaje
         else:
             data.descuento_aplicado = 0.0
 
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(detalle, key, value)
-    db.commit()
 
     if descuento_cambio:
-        if detalle.id_tipo_descuento:
-            generar_control_descuento(detalle.id_detalle_programa_alumno, detalle.id_modalidad_academica, detalle.id_tipo_descuento, db)
-        else:
-            limpiar_control_descuento(detalle.id_detalle_programa_alumno, data.id_tipo_descuento if data.id_tipo_descuento else detalle.id_tipo_descuento, db)
+        if old_id_tipo_descuento:
+            limpiar_control_descuento(detalle.id_detalle_programa_alumno, old_id_tipo_descuento, db)
+        if new_id_tipo_descuento:
+            generar_control_descuento(detalle.id_detalle_programa_alumno, detalle.id_modalidad_academica, new_id_tipo_descuento, db)
 
+    db.commit()
     db.refresh(detalle)
     return detalle
 
