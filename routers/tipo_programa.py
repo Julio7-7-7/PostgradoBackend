@@ -71,6 +71,14 @@ def editar(id: int, data: TipoProgramaUpdate, db: Session = Depends(get_db), cur
     if not tipo:
         raise HTTPException(status_code=404, detail="No encontrado")
 
+    if data.nombre and data.nombre != tipo.nombre:
+        existente = db.query(TipoPrograma).filter(
+            TipoPrograma.nombre == data.nombre,
+            TipoPrograma.id_tipo_programa != id
+        ).first()
+        if existente:
+            raise HTTPException(status_code=400, detail="Ya existe un tipo de programa con ese nombre")
+
     for key, value in data.model_dump(exclude_unset=True).items():
         if key != "modalidades":
             setattr(tipo, key, value)

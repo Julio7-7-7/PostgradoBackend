@@ -2,6 +2,7 @@ import re
 from pydantic import BaseModel, ConfigDict, field_validator
 from datetime import datetime
 from enum import Enum
+from schemas.enums import GeneroEnum
 
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 
@@ -28,10 +29,6 @@ class GradoEnum(str, Enum):
     ing = "Ing."
     lic = "Lic."
     otro = "Otro"
-
-class GeneroEnum(str, Enum):
-    masculino = "masculino"
-    femenino = "femenino"
 
 class DocenteBase(BaseModel):
     ci: str
@@ -98,6 +95,7 @@ class DocenteUpdate(BaseModel):
 
 class DocenteResponse(DocenteBase):
     id_docente: int
+    id_usuario: int | None = None
     tiene_modulos_activos: bool = False
     created_at: datetime
     updated_at: datetime
