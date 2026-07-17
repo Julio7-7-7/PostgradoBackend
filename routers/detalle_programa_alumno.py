@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from datetime import date
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from dependencies import get_current_user, require_permiso
@@ -180,6 +181,8 @@ def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db), curr
 
     nuevo = DetalleProgramaAlumno(**data.model_dump())
     nuevo.descuento_aplicado = descuento_aplicado
+    nuevo.estado = "postulante"
+    nuevo.fecha_inscripcion = date.today()
     db.add(nuevo)
     db.flush()
 
@@ -231,7 +234,6 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
         td = _validar_descuento(data.id_tipo_descuento, data.id_modalidad_academica, current_user.id_profile, db)
         descuento_aplicado = td.porcentaje
 
-    from datetime import date
     nuevo = DetalleProgramaAlumno(
         id_programa_version_edicion=data.id_programa_version_edicion,
         id_alumno=current_user.id_profile,
