@@ -107,14 +107,3 @@ def editar(id: int, data: AlumnoUpdate, db: Session = Depends(get_db), current_u
     db.commit()
     db.refresh(alumno)
     return alumno
-
-
-@router.patch("/{id}/cambiar-estado", response_model=AlumnoResponse)
-def cambiar_estado(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.editar"))):
-    alumno = db.query(Alumno).filter(Alumno.id_alumno == id).first()
-    if not alumno:
-        raise HTTPException(status_code=404, detail="No encontrado")
-    alumno.estado = "inactivo" if alumno.estado == "activo" else "activo"
-    db.commit()
-    db.refresh(alumno)
-    return alumno
