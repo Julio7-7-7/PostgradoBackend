@@ -131,22 +131,17 @@
   │ PK id_modalidad_ac.  │   N  N   │ PK id_requisito      │
   │    nombre_modalidad  │◄────────►│    nombre (UK)       │
   │    descripcion       │modalidad_│    descripcion       │
-  │    requiere_titulo   │ requisito│    imagen_url        │
-  │    estado            │          │    estado            │
-  │    created_at        │          │    created_at        │
-  │    updated_at        │          │    updated_at        │
-  └──────────┬───────────┘          └──────────┬───────────┘
-             │                                 │
-             │                                 │
-             │                                 │
+  │    estado            │ requisito│    imagen_url        │
+  │    created_at        │          │    estado            │
+  │    updated_at        │          │    created_at        │
+  └──────────┬───────────┘          │    updated_at        │
+             │                      └──────────┬───────────┘
              │  N                              │  N
-             │                                 │
-             ▼ 1                               ▼ 1
+             ▼                                 ▼
   ┌──────────────────────┐          ┌──────────────────────┐
-  │ MODALIDAD_REQUISITO  │          │ (FK a requisitos)    │
-  │ FK id_modalidad_ac.  │          │                      │
-  │ FK id_requisito      │          │                      │
-  │ PK compuesta         │          │                      │
+  │ MODALIDAD_REQUISITO  │          │ MODALIDAD_REQUISITO  │
+  │ FK id_modalidad_ac.  │          │ FK id_requisito      │
+  │ PK compuesta         │          │ PK compuesta         │
   └──────────────────────┘          └──────────────────────┘
 
 

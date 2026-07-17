@@ -10,29 +10,11 @@ class EstadoEdicionEnum(str, Enum):
     reprogramado = "reprogramado"
     finalizado = "finalizado"
 
-class SemestreAnioValidator(BaseModel):
-    semestre: int | None = None
-    anio: int | None = None
-
-    @field_validator("semestre")
-    @classmethod
-    def validar_semestre(cls, v):
-        if v is not None and v not in (1, 2):
-            raise ValueError("El semestre debe ser 1 o 2")
-        return v
-
-    @field_validator("anio")
-    @classmethod
-    def validar_anio(cls, v):
-        if v is not None and (v < 2000 or v > 2100):
-            raise ValueError("El año debe estar entre 2000 y 2100")
-        return v
-
 class ProgramaVersionEdicionBase(BaseModel):
     id_programa_version: int
     modalidad: ModalidadEnum
-    semestre: int | None = None
-    anio: int | None = None
+    semestre: int
+    anio: int
     es_historico: bool = False
     estado: EstadoEdicionEnum = EstadoEdicionEnum.programado
     fecha_inicio: date | None = None
@@ -58,14 +40,14 @@ class ProgramaVersionEdicionBase(BaseModel):
     @field_validator("semestre")
     @classmethod
     def validar_semestre(cls, v):
-        if v is not None and v not in (1, 2):
+        if v not in (1, 2):
             raise ValueError("El semestre debe ser 1 o 2")
         return v
 
     @field_validator("anio")
     @classmethod
     def validar_anio(cls, v):
-        if v is not None and (v < 2000 or v > 2100):
+        if v < 2000 or v > 2100:
             raise ValueError("El año debe estar entre 2000 y 2100")
         return v
 

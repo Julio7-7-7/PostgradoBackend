@@ -8,12 +8,12 @@ class ModalidadRequisito(Base):
 
     id_modalidad_academica = Column(
         Integer,
-        ForeignKey("modalidades_academicas.id_modalidad_academica", ondelete="CASCADE"),
+        ForeignKey("modalidades_academicas.id_modalidad_academica"),
         primary_key=True,
     )
     id_requisito = Column(
         Integer,
-        ForeignKey("requisitos.id_requisito", ondelete="CASCADE"),
+        ForeignKey("requisitos.id_requisito"),
         primary_key=True,
     )
     created_at = Column(DateTime, server_default=func.now(), nullable=False)

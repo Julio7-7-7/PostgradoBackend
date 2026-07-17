@@ -13,5 +13,5 @@ class Rol(Base):
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    usuario_roles = relationship("UsuarioRol", back_populates="rol")
+    usuario_roles = relationship("UsuarioRol", back_populates="rol", cascade="all, delete-orphan")
     roles_permisos = relationship("RolesPermiso", back_populates="rol", cascade="all, delete-orphan")

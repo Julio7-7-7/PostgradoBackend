@@ -1,4 +1,5 @@
 from datetime import datetime, date
+from decimal import Decimal
 from enum import Enum
 from pydantic import BaseModel, ConfigDict, field_validator
 from schemas.alumno import AlumnoResponse
@@ -21,7 +22,7 @@ class DetalleProgramaAlumnoBase(BaseModel):
     id_alumno: int
     id_modalidad_academica: int
     id_tipo_descuento: int | None = None
-    descuento_aplicado: float = 0.0
+    descuento_aplicado: Decimal = Decimal("0.00")
     estado: EstadoDetalleAlumnoEnum = EstadoDetalleAlumnoEnum.postulante
     fecha_inscripcion: date | None = None
 
@@ -37,7 +38,7 @@ class DetalleProgramaAlumnoCreate(DetalleProgramaAlumnoBase):
 
 class DetalleProgramaAlumnoUpdate(BaseModel):
     id_tipo_descuento: int | None = None
-    descuento_aplicado: float | None = None
+    descuento_aplicado: Decimal | None = None
     estado: EstadoDetalleAlumnoEnum | None = None
     fecha_inscripcion: date | None = None
 

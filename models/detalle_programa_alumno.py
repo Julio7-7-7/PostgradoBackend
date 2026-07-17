@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Float, String, Date, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, Numeric, String, Date, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -11,7 +11,7 @@ class DetalleProgramaAlumno(Base):
     id_alumno = Column(Integer, ForeignKey("alumnos.id_alumno"), nullable=False)
     id_modalidad_academica = Column(Integer, ForeignKey("modalidades_academicas.id_modalidad_academica"), nullable=False)
     id_tipo_descuento = Column(Integer, ForeignKey("tipos_descuento.id_tipo_descuento"), nullable=True)
-    descuento_aplicado = Column(Float, nullable=False, default=0.0)
+    descuento_aplicado = Column(Numeric(5, 2), nullable=False, default=0.0)
     estado = Column(String(20), nullable=False, default="postulante")
     fecha_inscripcion = Column(Date, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)

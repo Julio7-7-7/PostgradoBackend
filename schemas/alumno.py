@@ -80,6 +80,7 @@ class AlumnoUpdate(BaseModel):
 
 class AlumnoResponse(AlumnoBase):
     id_alumno: int
+    id_usuario: int | None = None
     created_at: datetime
     updated_at: datetime
 
