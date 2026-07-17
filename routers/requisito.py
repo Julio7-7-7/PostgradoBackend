@@ -10,7 +10,6 @@ from .utils import guardar_foto_base64, eliminar_foto
 router = APIRouter(
     prefix="/requisitos",
     tags=["Requisitos"],
-    dependencies=[Depends(get_current_user)]
 )
 
 @router.post("/", response_model=RequisitoResponse, status_code=201)
@@ -37,7 +36,7 @@ def listar(db: Session = Depends(get_db), current_user: UserResponse = Depends(r
     return db.query(Requisito).all()
 
 @router.get("/{id}", response_model=RequisitoResponse)
-def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("requisitos.ver"))):
+def obtener(id: int, db: Session = Depends(get_db)):
     requisito = db.query(Requisito).filter(Requisito.id_requisito == id).first()
     if not requisito:
         raise HTTPException(status_code=404, detail="No encontrado")

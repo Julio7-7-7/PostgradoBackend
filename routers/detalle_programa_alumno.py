@@ -279,15 +279,15 @@ def editar(id: int, data: DetalleProgramaAlumnoUpdate, db: Session = Depends(get
     new_id_tipo_descuento = data.id_tipo_descuento if "id_tipo_descuento" in data.model_fields_set else None
     descuento_cambio = new_id_tipo_descuento is not None and new_id_tipo_descuento != old_id_tipo_descuento
 
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(detalle, key, value)
+
     if descuento_cambio:
         if new_id_tipo_descuento:
             td = _validar_descuento(new_id_tipo_descuento, detalle.id_modalidad_academica, detalle.id_alumno, db)
-            data.descuento_aplicado = td.porcentaje
+            detalle.descuento_aplicado = float(td.porcentaje)
         else:
-            data.descuento_aplicado = 0.0
-
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(detalle, key, value)
+            detalle.descuento_aplicado = 0.0
 
     if descuento_cambio:
         if old_id_tipo_descuento:
