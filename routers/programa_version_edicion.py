@@ -12,6 +12,7 @@ from models.detalle_programa_modulo import DetalleProgramaModulo
 from models.detalle_programa_alumno import DetalleProgramaAlumno
 from models.alumno import Alumno
 from models.control_documentacion import ControlDocumentacion
+from models.requisito import Requisito
 from schemas.programa_version_edicion import ProgramaVersionEdicionCreate, ProgramaVersionEdicionUpdate, ProgramaVersionEdicionResponse
 from schemas.auth import UserResponse
 from routers.edition_state import actualizar_estado_edicion
@@ -280,21 +281,12 @@ def postulantes_por_edicion(id: int, db: Session = Depends(get_db), current_user
         ).all()
 
         total_docs = len(controles)
-        docs_ok = sum(1 for c in controles if c.estado in ("aceptado", "entregado"))
+        docs_ok = sum(1 for c in controles if c.estado in ("aceptado",))
 
-        resultado.append({
-            "id_detalle_programa_alumno": detalle.id_detalle_programa_alumno,
-            "estado": detalle.estado,
-            "fecha_inscripcion": str(detalle.fecha_inscripcion) if detalle.fecha_inscripcion else None,
-            "descuento_aplicado": detalle.descuento_aplicado,
-            "alumno": {
-                "id_alumno": alumno.id_alumno if alumno else None,
-                "nombre": alumno.nombre if alumno else "N/A",
-                "apellido": alumno.apellido if alumno else "N/A",
-                "ci": alumno.ci if alumno else None,
-                "correo": alumno.correo if alumno else None,
-            } if alumno else None,
-            "control_documentacion": [{
+        control_data = []
+        for c in controles:
+            requisito = db.query(Requisito).filter(Requisito.id_requisito == c.id_requisito).first()
+            control_data.append({
                 "id_control_documentacion": c.id_control_documentacion,
                 "id_requisito": c.id_requisito,
                 "estado": c.estado,
@@ -303,7 +295,23 @@ def postulantes_por_edicion(id: int, db: Session = Depends(get_db), current_user
                 "fecha_entrega": str(c.fecha_entrega) if c.fecha_entrega else None,
                 "fecha_revision": str(c.fecha_revision) if c.fecha_revision else None,
                 "observaciones": c.observaciones,
-            } for c in controles],
+                "requisito_nombre": requisito.nombre if requisito else f"Requisito #{c.id_requisito}",
+            })
+
+        resultado.append({
+            "id_detalle_programa_alumno": detalle.id_detalle_programa_alumno,
+            "estado": detalle.estado,
+            "fecha_inscripcion": str(detalle.fecha_inscripcion) if detalle.fecha_inscripcion else None,
+            "descuento_aplicado": float(detalle.descuento_aplicado) if detalle.descuento_aplicado else 0,
+            "modulo_inicio": detalle.modulo_inicio,
+            "alumno": {
+                "id_alumno": alumno.id_alumno if alumno else None,
+                "nombre": alumno.nombre if alumno else "N/A",
+                "apellido": alumno.apellido if alumno else "N/A",
+                "ci": alumno.ci if alumno else None,
+                "correo": alumno.correo if alumno else None,
+            } if alumno else None,
+            "control_documentacion": control_data,
             "docs_completados": docs_ok,
             "docs_total": total_docs,
         })

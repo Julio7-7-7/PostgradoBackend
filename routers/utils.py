@@ -97,6 +97,17 @@ def guardar_pdf_base64(data_url: str, media_subdir: str = "contratos") -> str:
     return _decodificar_base64(data_url, extension, media_subdir)
 
 
+def guardar_documento_base64(data_url: str, media_subdir: str = "documentos") -> str:
+    headers = data_url.split(",", 1)[0]
+    extension = headers.split(";")[0].split("/")[1]
+    if extension not in FORMATOS_PERMITIDOS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Formato no soportado: {extension}. Use: {', '.join(FORMATOS_PERMITIDOS)}",
+        )
+    return _decodificar_base64(data_url, extension, media_subdir)
+
+
 def eliminar_foto(ruta: str | None):
     if ruta:
         archivo = Path(__file__).parent.parent / ruta.lstrip("/")

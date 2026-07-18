@@ -25,3 +25,5 @@ from models.usuario import Usuario
 from models.usuario_rol import UsuarioRol
 from models.administrativo import Administrativo
 from models.modalidad_tipo_programa import ModalidadTipoPrograma
+from models.pago import Pago
+from models.nota import Nota

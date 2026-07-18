@@ -19,6 +19,9 @@ from routers import auth
 from routers import roles
 from routers import permisos
 from routers import usuarios
+from routers import pago
+from routers import nota
+from routers import dashboard
 
 all_routers = [
     tipo_programa.router,
@@ -42,4 +45,7 @@ all_routers = [
     roles.router,
     permisos.router,
     usuarios.router,
+    pago.router,
+    nota.router,
+    dashboard.router,
 ]

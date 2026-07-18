@@ -152,6 +152,16 @@ def _validar_descuento(id_tipo_descuento: int, id_modalidad_academica: int, id_a
     return tipo_descuento
 
 
+def _cargar_con_relations(query):
+    return query.options(
+        joinedload(DetalleProgramaAlumno.alumno),
+        joinedload(DetalleProgramaAlumno.modalidad_academica),
+        joinedload(DetalleProgramaAlumno.programa_version_edicion),
+        joinedload(DetalleProgramaAlumno.tipo_descuento),
+        joinedload(DetalleProgramaAlumno.control_documentacion).joinedload(ControlDocumentacion.requisito),
+    )
+
+
 @router.post("/", response_model=DetalleProgramaAlumnoResponse, status_code=201)
 def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.crear"))):
     modalidad = db.query(ModalidadAcademica).filter(
@@ -193,15 +203,37 @@ def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db), curr
 
     db.commit()
     db.refresh(nuevo)
-    return nuevo
+    return _cargar_con_relations(
+        db.query(DetalleProgramaAlumno).filter(
+            DetalleProgramaAlumno.id_detalle_programa_alumno == nuevo.id_detalle_programa_alumno
+        )
+    ).first()
+
 
 @router.get("/mis-inscripciones", response_model=list[DetalleProgramaAlumnoResponse])
 def mis_inscripciones(db: Session = Depends(get_db), current_user: UserResponse = Depends(get_current_user)):
     if current_user.profile_type != "alumno" or not current_user.id_profile:
         raise HTTPException(status_code=400, detail="El usuario actual no es un alumno")
-    return db.query(DetalleProgramaAlumno).filter(
-        DetalleProgramaAlumno.id_alumno == current_user.id_profile
+    return _cargar_con_relations(
+        db.query(DetalleProgramaAlumno).filter(
+            DetalleProgramaAlumno.id_alumno == current_user.id_profile
+        )
     ).all()
+
+
+@router.get("/mi-inscripcion/{id}", response_model=DetalleProgramaAlumnoResponse)
+def mi_inscripcion(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(get_current_user)):
+    if current_user.profile_type != "alumno" or not current_user.id_profile:
+        raise HTTPException(status_code=400, detail="El usuario actual no es un alumno")
+    detalle = _cargar_con_relations(
+        db.query(DetalleProgramaAlumno).filter(
+            DetalleProgramaAlumno.id_detalle_programa_alumno == id,
+            DetalleProgramaAlumno.id_alumno == current_user.id_profile,
+        )
+    ).first()
+    if not detalle:
+        raise HTTPException(status_code=404, detail="Inscripción no encontrada")
+    return detalle
 
 
 @router.post("/auto-inscribir", response_model=DetalleProgramaAlumnoResponse, status_code=201)
@@ -253,21 +285,29 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
 
     db.commit()
     db.refresh(nuevo)
-    return nuevo
+    return _cargar_con_relations(
+        db.query(DetalleProgramaAlumno).filter(
+            DetalleProgramaAlumno.id_detalle_programa_alumno == nuevo.id_detalle_programa_alumno
+        )
+    ).first()
 
 
 @router.get("/", response_model=list[DetalleProgramaAlumnoResponse])
 def listar(db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.ver"))):
-    return db.query(DetalleProgramaAlumno).all()
+    return _cargar_con_relations(db.query(DetalleProgramaAlumno)).all()
+
 
 @router.get("/{id}", response_model=DetalleProgramaAlumnoResponse)
 def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.ver"))):
-    detalle = db.query(DetalleProgramaAlumno).filter(
-        DetalleProgramaAlumno.id_detalle_programa_alumno == id
+    detalle = _cargar_con_relations(
+        db.query(DetalleProgramaAlumno).filter(
+            DetalleProgramaAlumno.id_detalle_programa_alumno == id
+        )
     ).first()
     if not detalle:
         raise HTTPException(status_code=404, detail="No encontrado")
     return detalle
+
 
 @router.patch("/{id}", response_model=DetalleProgramaAlumnoResponse)
 def editar(id: int, data: DetalleProgramaAlumnoUpdate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.editar"))):
@@ -299,7 +339,33 @@ def editar(id: int, data: DetalleProgramaAlumnoUpdate, db: Session = Depends(get
 
     db.commit()
     db.refresh(detalle)
-    return detalle
+    return _cargar_con_relations(
+        db.query(DetalleProgramaAlumno).filter(
+            DetalleProgramaAlumno.id_detalle_programa_alumno == id
+        )
+    ).first()
+
+
+@router.patch("/{id}/retirar", response_model=DetalleProgramaAlumnoResponse)
+def retirar(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(get_current_user)):
+    if current_user.profile_type != "alumno" or not current_user.id_profile:
+        raise HTTPException(status_code=400, detail="El usuario actual no es un alumno")
+    detalle = db.query(DetalleProgramaAlumno).filter(
+        DetalleProgramaAlumno.id_detalle_programa_alumno == id,
+        DetalleProgramaAlumno.id_alumno == current_user.id_profile,
+    ).first()
+    if not detalle:
+        raise HTTPException(status_code=404, detail="Inscripción no encontrada")
+    if detalle.estado in ("retirado", "finalizado", "graduado", "titulado"):
+        raise HTTPException(status_code=400, detail=f"No se puede retirar de un estado '{detalle.estado}'")
+    detalle.estado = "retirado"
+    db.commit()
+    return _cargar_con_relations(
+        db.query(DetalleProgramaAlumno).filter(
+            DetalleProgramaAlumno.id_detalle_programa_alumno == id
+        )
+    ).first()
+
 
 @router.delete("/{id}", status_code=204)
 def eliminar(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.editar"))):
