@@ -40,7 +40,6 @@ class DetalleProgramaAlumnoCreate(DetalleProgramaAlumnoBase):
 
 class DetalleProgramaAlumnoUpdate(BaseModel):
     id_tipo_descuento: int | None = None
-    descuento_aplicado: Decimal | None = None
     modulo_inicio: int | None = None
     estado: EstadoDetalleAlumnoEnum | None = None
     fecha_inscripcion: date | None = None

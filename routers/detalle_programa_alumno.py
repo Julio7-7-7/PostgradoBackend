@@ -21,6 +21,49 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)]
 )
 
+TRANSICIONES_ESTADO = {
+    "postulante": ["observado", "inscrito", "retirado"],
+    "observado": ["inscrito", "postulante", "retirado"],
+    "inscrito": ["en_curso", "retirado"],
+    "en_curso": ["finalizado", "retirado"],
+    "finalizado": ["graduado"],
+    "graduado": ["titulado"],
+    "retirado": [],
+    "titulado": [],
+}
+
+
+def _validar_transicion_estado(estado_actual, nuevo_estado):
+    opciones = TRANSICIONES_ESTADO.get(estado_actual, [])
+    valor = nuevo_estado.value if hasattr(nuevo_estado, 'value') else nuevo_estado
+    if valor not in opciones:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se puede cambiar de '{estado_actual}' a '{valor}'"
+        )
+
+
+def _validar_cupo(id_programa_version_edicion, db: Session):
+    pve = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion == id_programa_version_edicion
+    ).first()
+    if not pve:
+        raise HTTPException(status_code=404, detail="Edición no encontrada")
+    if pve.estado not in ("programado", "en_curso"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se puede inscribir en una edición con estado '{pve.estado}'"
+        )
+    inscritos = db.query(DetalleProgramaAlumno).filter(
+        DetalleProgramaAlumno.id_programa_version_edicion == id_programa_version_edicion,
+        DetalleProgramaAlumno.estado != "retirado",
+    ).count()
+    if inscritos >= pve.cupo_maximo:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No hay cupo disponible. Máximo: {pve.cupo_maximo}, inscritos: {inscritos}"
+        )
+
 
 def generar_control_documentacion(id_detalle: int, id_modalidad_academica: int, db: Session):
     from models.modalidad_requisito import ModalidadRequisito
@@ -184,6 +227,8 @@ def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db), curr
             detail="El alumno ya está inscrito en esta edición del programa"
         )
 
+    _validar_cupo(data.id_programa_version_edicion, db)
+
     descuento_aplicado = 0.0
     if data.id_tipo_descuento:
         td = _validar_descuento(data.id_tipo_descuento, data.id_modalidad_academica, data.id_alumno, db)
@@ -261,6 +306,8 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
 
     validar_modalidad_programa(data.id_modalidad_academica, data.id_programa_version_edicion, db)
 
+    _validar_cupo(data.id_programa_version_edicion, db)
+
     descuento_aplicado = 0.0
     if data.id_tipo_descuento:
         td = _validar_descuento(data.id_tipo_descuento, data.id_modalidad_academica, current_user.id_profile, db)
@@ -321,7 +368,17 @@ def editar(id: int, data: DetalleProgramaAlumnoUpdate, db: Session = Depends(get
     new_id_tipo_descuento = data.id_tipo_descuento if "id_tipo_descuento" in data.model_fields_set else None
     descuento_cambio = new_id_tipo_descuento is not None and new_id_tipo_descuento != old_id_tipo_descuento
 
-    for key, value in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+    update_data.pop("descuento_aplicado", None)
+
+    if "modulo_inicio" in update_data and update_data["modulo_inicio"] is not None:
+        if update_data["modulo_inicio"] < 1:
+            raise HTTPException(status_code=400, detail="El módulo de inicio debe ser >= 1")
+
+    if "estado" in update_data and update_data["estado"] is not None:
+        _validar_transicion_estado(detalle.estado, update_data["estado"])
+
+    for key, value in update_data.items():
         setattr(detalle, key, value)
 
     if descuento_cambio:
@@ -356,8 +413,7 @@ def retirar(id: int, db: Session = Depends(get_db), current_user: UserResponse =
     ).first()
     if not detalle:
         raise HTTPException(status_code=404, detail="Inscripción no encontrada")
-    if detalle.estado in ("retirado", "finalizado", "graduado", "titulado"):
-        raise HTTPException(status_code=400, detail=f"No se puede retirar de un estado '{detalle.estado}'")
+    _validar_transicion_estado(detalle.estado, "retirado")
     detalle.estado = "retirado"
     db.commit()
     return _cargar_con_relations(
@@ -367,12 +423,18 @@ def retirar(id: int, db: Session = Depends(get_db), current_user: UserResponse =
     ).first()
 
 
-@router.delete("/{id}", status_code=204)
+@router.delete("/{id}", response_model=DetalleProgramaAlumnoResponse)
 def eliminar(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.editar"))):
     detalle = db.query(DetalleProgramaAlumno).filter(
         DetalleProgramaAlumno.id_detalle_programa_alumno == id
     ).first()
     if not detalle:
         raise HTTPException(status_code=404, detail="No encontrado")
-    db.delete(detalle)
+    _validar_transicion_estado(detalle.estado, "retirado")
+    detalle.estado = "retirado"
     db.commit()
+    return _cargar_con_relations(
+        db.query(DetalleProgramaAlumno).filter(
+            DetalleProgramaAlumno.id_detalle_programa_alumno == id
+        )
+    ).first()
