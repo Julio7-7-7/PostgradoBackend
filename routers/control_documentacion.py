@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 from datetime import date
 from pydantic import BaseModel
+import math
 from database import get_db
 from dependencies import get_current_user, require_permiso
 from models.control_documentacion import ControlDocumentacion
@@ -10,7 +11,7 @@ from models.alumno import Alumno
 from models.usuario import Usuario
 from models.usuario_rol import UsuarioRol
 from models.requisito import Requisito
-from schemas.control_documentacion import ControlDocumentacionCreate, ControlDocumentacionUpdate, ControlDocumentacionResponse
+from schemas.control_documentacion import ControlDocumentacionCreate, ControlDocumentacionUpdate, ControlDocumentacionResponse, PaginatedControlDocumentacionResponse
 from schemas.auth import UserResponse
 from routers.utils import guardar_documento_base64, eliminar_foto
 
@@ -118,9 +119,38 @@ def crear(data: ControlDocumentacionCreate, db: Session = Depends(get_db), curre
     return nuevo
 
 
-@router.get("/", response_model=list[ControlDocumentacionResponse])
-def listar(db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("documentos.revisar"))):
-    return db.query(ControlDocumentacion).all()
+@router.get("/", response_model=PaginatedControlDocumentacionResponse)
+def listar(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    search: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(require_permiso("documentos.revisar")),
+):
+    query = db.query(ControlDocumentacion).options(
+        joinedload(ControlDocumentacion.requisito)
+    )
+
+    if search:
+        like = f"%{search}%"
+        query = query.join(
+            DetalleProgramaAlumno,
+            ControlDocumentacion.id_detalle_programa_alumno == DetalleProgramaAlumno.id_detalle_programa_alumno
+        ).join(
+            Alumno,
+            DetalleProgramaAlumno.id_alumno == Alumno.id_alumno
+        ).filter(
+            Alumno.nombre.ilike(like) | Alumno.apellido.ilike(like) | Alumno.ci.ilike(like)
+        )
+
+    total = query.count()
+    pages = math.ceil(total / per_page) if total else 0
+    offset = (page - 1) * per_page
+    items = query.order_by(ControlDocumentacion.id_control_documentacion).offset(offset).limit(per_page).all()
+
+    return PaginatedControlDocumentacionResponse(
+        items=items, total=total, page=page, per_page=per_page, pages=pages
+    )
 
 
 @router.get("/{id}", response_model=ControlDocumentacionResponse)
