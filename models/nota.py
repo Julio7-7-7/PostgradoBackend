@@ -10,6 +10,7 @@ class Nota(Base):
     id_nota = Column(Integer, primary_key=True, index=True, autoincrement=True)
     id_detalle_programa_alumno = Column(Integer, ForeignKey("detalle_programa_alumno.id_detalle_programa_alumno"), nullable=False)
     id_detalle_programa_modulo = Column(Integer, ForeignKey("detalle_programa_modulo.id_detalle_programa_modulo"), nullable=False)
+    id_programa_version_edicion = Column(Integer, ForeignKey("programa_version_edicion.id_programa_version_edicion"), nullable=True)
     nota = Column(Numeric(5, 2), nullable=False)
     tipo = Column(String(50), nullable=False, default="final")
     fecha = Column(Date, nullable=False)

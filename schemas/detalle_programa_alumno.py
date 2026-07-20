@@ -12,6 +12,7 @@ class EstadoDetalleAlumnoEnum(str, Enum):
     postulante = "postulante"
     observado = "observado"
     inscrito = "inscrito"
+    incorporado = "incorporado"
     en_curso = "en_curso"
     finalizado = "finalizado"
     graduado = "graduado"
@@ -55,3 +56,39 @@ class DetalleProgramaAlumnoResponse(DetalleProgramaAlumnoBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AlumnoBasico(BaseModel):
+    id_alumno: int
+    nombre: str
+    apellido: str
+    ci: str | None = None
+    correo: str | None = None
+
+
+class InscripcionEdicionItem(BaseModel):
+    id_detalle_programa_alumno: int
+    alumno: AlumnoBasico
+    estado: str
+    modalidad: str
+    descuento_aplicado: float
+    tipo_descuento: str | None = None
+    modulo_inicio: int
+    fecha_inscripcion: str | None = None
+    docs_completados: int
+    docs_total: int
+
+
+class PaginatedInscripcionesResponse(BaseModel):
+    items: list[InscripcionEdicionItem]
+    total: int
+    page: int
+    per_page: int
+    pages: int
+
+
+class TransferirInscripcionRequest(BaseModel):
+    id_programa_version_edicion_destino: int
+    motivo: str
+    id_modalidad_academica: int
+    id_tipo_descuento: int | None = None

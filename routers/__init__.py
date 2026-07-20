@@ -22,6 +22,8 @@ from routers import usuarios
 from routers import pago
 from routers import nota
 from routers import dashboard
+from routers import avance_modulo
+from routers import documento_incorporacion
 
 all_routers = [
     tipo_programa.router,
@@ -48,4 +50,6 @@ all_routers = [
     pago.router,
     nota.router,
     dashboard.router,
+    avance_modulo.router,
+    documento_incorporacion.router,
 ]

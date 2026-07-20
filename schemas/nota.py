@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict
 class NotaCreate(BaseModel):
     id_detalle_programa_alumno: int
     id_detalle_programa_modulo: int
+    id_programa_version_edicion: int | None = None
     nota: Decimal
     tipo: str = "final"
     fecha: date
@@ -23,6 +24,7 @@ class NotaResponse(BaseModel):
     id_nota: int
     id_detalle_programa_alumno: int
     id_detalle_programa_modulo: int
+    id_programa_version_edicion: int | None
     nota: Decimal
     tipo: str
     fecha: date
