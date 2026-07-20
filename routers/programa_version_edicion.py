@@ -12,6 +12,8 @@ from models.detalle_programa_modulo import DetalleProgramaModulo
 from models.detalle_programa_alumno import DetalleProgramaAlumno
 from models.alumno import Alumno
 from models.control_documentacion import ControlDocumentacion
+from models.requisito import Requisito
+from models.modalidad_academica import ModalidadAcademica
 from schemas.programa_version_edicion import ProgramaVersionEdicionCreate, ProgramaVersionEdicionUpdate, ProgramaVersionEdicionResponse
 from schemas.auth import UserResponse
 from routers.edition_state import actualizar_estado_edicion
@@ -272,29 +274,53 @@ def postulantes_por_edicion(id: int, db: Session = Depends(get_db), current_user
         DetalleProgramaAlumno.id_programa_version_edicion == id
     ).all()
 
+    if not detalles:
+        return []
+
+    alumno_ids = {d.id_alumno for d in detalles}
+    modalidad_ids = {d.id_modalidad_academica for d in detalles}
+    detalle_ids = [d.id_detalle_programa_alumno for d in detalles]
+
+    alumnos_map = {
+        a.id_alumno: a
+        for a in db.query(Alumno).filter(Alumno.id_alumno.in_(alumno_ids)).all()
+    } if alumno_ids else {}
+
+    modalidades_map = {
+        m.id_modalidad_academica: m
+        for m in db.query(ModalidadAcademica).filter(
+            ModalidadAcademica.id_modalidad_academica.in_(modalidad_ids)
+        ).all()
+    } if modalidad_ids else {}
+
+    controles_all = db.query(ControlDocumentacion).filter(
+        ControlDocumentacion.id_detalle_programa_alumno.in_(detalle_ids)
+    ).all()
+
+    controles_por_detalle: dict[int, list[ControlDocumentacion]] = {}
+    requisito_ids = set()
+    for c in controles_all:
+        controles_por_detalle.setdefault(c.id_detalle_programa_alumno, []).append(c)
+        requisito_ids.add(c.id_requisito)
+
+    requisitos_map = {
+        r.id_requisito: r
+        for r in db.query(Requisito).filter(Requisito.id_requisito.in_(requisito_ids)).all()
+    } if requisito_ids else {}
+
     resultado = []
     for detalle in detalles:
-        alumno = db.query(Alumno).filter(Alumno.id_alumno == detalle.id_alumno).first()
-        controles = db.query(ControlDocumentacion).filter(
-            ControlDocumentacion.id_detalle_programa_alumno == detalle.id_detalle_programa_alumno
-        ).all()
+        alumno = alumnos_map.get(detalle.id_alumno)
+        modalidad = modalidades_map.get(detalle.id_modalidad_academica)
+        controles = controles_por_detalle.get(detalle.id_detalle_programa_alumno, [])
 
         total_docs = len(controles)
-        docs_ok = sum(1 for c in controles if c.estado in ("aceptado", "entregado"))
+        docs_ok = sum(1 for c in controles if c.estado in ("aceptado",))
 
-        resultado.append({
-            "id_detalle_programa_alumno": detalle.id_detalle_programa_alumno,
-            "estado": detalle.estado,
-            "fecha_inscripcion": str(detalle.fecha_inscripcion) if detalle.fecha_inscripcion else None,
-            "descuento_aplicado": detalle.descuento_aplicado,
-            "alumno": {
-                "id_alumno": alumno.id_alumno if alumno else None,
-                "nombre": alumno.nombre if alumno else "N/A",
-                "apellido": alumno.apellido if alumno else "N/A",
-                "ci": alumno.ci if alumno else None,
-                "correo": alumno.correo if alumno else None,
-            } if alumno else None,
-            "control_documentacion": [{
+        control_data = []
+        for c in controles:
+            requisito = requisitos_map.get(c.id_requisito)
+            control_data.append({
                 "id_control_documentacion": c.id_control_documentacion,
                 "id_requisito": c.id_requisito,
                 "estado": c.estado,
@@ -303,7 +329,25 @@ def postulantes_por_edicion(id: int, db: Session = Depends(get_db), current_user
                 "fecha_entrega": str(c.fecha_entrega) if c.fecha_entrega else None,
                 "fecha_revision": str(c.fecha_revision) if c.fecha_revision else None,
                 "observaciones": c.observaciones,
-            } for c in controles],
+                "requisito_nombre": requisito.nombre if requisito else f"Requisito #{c.id_requisito}",
+            })
+
+        resultado.append({
+            "id_detalle_programa_alumno": detalle.id_detalle_programa_alumno,
+            "id_modalidad_academica": detalle.id_modalidad_academica,
+            "nombre_modalidad": modalidad.nombre_modalidad if modalidad else "N/A",
+            "estado": detalle.estado,
+            "fecha_inscripcion": str(detalle.fecha_inscripcion) if detalle.fecha_inscripcion else None,
+            "descuento_aplicado": float(detalle.descuento_aplicado) if detalle.descuento_aplicado else 0,
+            "modulo_inicio": detalle.modulo_inicio,
+            "alumno": {
+                "id_alumno": alumno.id_alumno if alumno else None,
+                "nombre": alumno.nombre if alumno else "N/A",
+                "apellido": alumno.apellido if alumno else "N/A",
+                "ci": alumno.ci if alumno else None,
+                "correo": alumno.correo if alumno else None,
+            } if alumno else None,
+            "control_documentacion": control_data,
             "docs_completados": docs_ok,
             "docs_total": total_docs,
         })

@@ -20,23 +20,31 @@ def listar_roles(
     _: UserResponse = Depends(require_permiso("roles.gestionar")),
 ):
     roles = db.query(Rol).order_by(Rol.id_rol).all()
-    result = []
-    for r in roles:
-        permisos = (
-            db.query(Permiso)
-            .join(RolesPermiso, RolesPermiso.id_permiso == Permiso.id_permiso)
-            .filter(RolesPermiso.id_rol == r.id_rol)
-            .all()
-        )
-        result.append(RolResponse(
+    if not roles:
+        return []
+
+    role_ids = [r.id_rol for r in roles]
+    permisos_all = (
+        db.query(Permiso, RolesPermiso.id_rol)
+        .join(RolesPermiso, RolesPermiso.id_permiso == Permiso.id_permiso)
+        .filter(RolesPermiso.id_rol.in_(role_ids))
+        .all()
+    )
+    permisos_por_rol: dict[int, list] = {}
+    for permiso, id_rol in permisos_all:
+        permisos_por_rol.setdefault(id_rol, []).append(permiso)
+
+    return [
+        RolResponse(
             id_rol=r.id_rol,
             nombre=r.nombre,
             descripcion=r.descripcion,
             created_at=r.created_at,
             updated_at=r.updated_at,
-            permisos=[PermisoResponse.model_validate(p) for p in permisos],
-        ))
-    return result
+            permisos=[PermisoResponse.model_validate(p) for p in permisos_por_rol.get(r.id_rol, [])],
+        )
+        for r in roles
+    ]
 
 
 @router.get("/{id_rol}", response_model=RolResponse)
@@ -78,9 +86,10 @@ def crear_rol(
     db.commit()
     db.refresh(rol)
     if data.permisos:
+        permisos_existentes = db.query(Permiso).filter(Permiso.id_permiso.in_(data.permisos)).all()
+        permisos_validos = {p.id_permiso for p in permisos_existentes}
         for id_permiso in data.permisos:
-            permiso = db.query(Permiso).filter(Permiso.id_permiso == id_permiso).first()
-            if permiso:
+            if id_permiso in permisos_validos:
                 db.add(RolesPermiso(id_rol=rol.id_rol, id_permiso=id_permiso))
         db.commit()
     permisos = (
@@ -135,9 +144,10 @@ def actualizar_rol(
                 )
 
         db.query(RolesPermiso).filter(RolesPermiso.id_rol == id_rol).delete()
+        permisos_existentes = db.query(Permiso).filter(Permiso.id_permiso.in_(data.permisos)).all()
+        permisos_validos = {p.id_permiso for p in permisos_existentes}
         for id_permiso in data.permisos:
-            permiso = db.query(Permiso).filter(Permiso.id_permiso == id_permiso).first()
-            if permiso:
+            if id_permiso in permisos_validos:
                 db.add(RolesPermiso(id_rol=id_rol, id_permiso=id_permiso))
     db.commit()
     db.refresh(rol)

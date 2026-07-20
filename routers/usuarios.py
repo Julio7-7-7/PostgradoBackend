@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from models.usuario import Usuario
 from models.usuario_rol import UsuarioRol
@@ -99,7 +99,20 @@ def listar_usuarios(
         page = pages
 
     offset = (page - 1) * per_page
-    usuarios = db.query(Usuario).order_by(Usuario.id_usuario).offset(offset).limit(per_page).all()
+    usuarios = db.query(Usuario).options(
+        joinedload(Usuario.usuario_roles),
+        joinedload(Usuario.alumno),
+        joinedload(Usuario.docente),
+        joinedload(Usuario.administrativo),
+    ).order_by(Usuario.id_usuario).offset(offset).limit(per_page).all()
+
+    ur_ids = [ur.id_rol for u in usuarios for ur in u.usuario_roles if ur.id_rol]
+    roles_map = {}
+    if ur_ids:
+        roles_map = {r.id_rol: r for r in db.query(Rol).filter(Rol.id_rol.in_(set(ur_ids))).all()}
+    for u in usuarios:
+        for ur in u.usuario_roles:
+            ur.rol = roles_map.get(ur.id_rol)
 
     return PaginatedUsersResponse(
         items=[_usuario_a_response(u) for u in usuarios],
@@ -116,9 +129,21 @@ def obtener_usuario(
     db: Session = Depends(get_db),
     _: UserResponse = Depends(require_permiso("usuarios.gestionar")),
 ):
-    usuario = db.query(Usuario).filter(Usuario.id_usuario == id_usuario).first()
+    usuario = db.query(Usuario).options(
+        joinedload(Usuario.usuario_roles),
+        joinedload(Usuario.alumno),
+        joinedload(Usuario.docente),
+        joinedload(Usuario.administrativo),
+    ).filter(Usuario.id_usuario == id_usuario).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    ur_ids = [ur.id_rol for ur in usuario.usuario_roles if ur.id_rol]
+    if ur_ids:
+        roles_map = {r.id_rol: r for r in db.query(Rol).filter(Rol.id_rol.in_(set(ur_ids))).all()}
+        for ur in usuario.usuario_roles:
+            ur.rol = roles_map.get(ur.id_rol)
+
     return _usuario_a_response(usuario)
 
 
@@ -148,14 +173,18 @@ def crear_usuario(
         db.flush()
 
         tiene_alumno = False
-        for id_rol in data.roles:
-            rol = db.query(Rol).filter(Rol.id_rol == id_rol).first()
-            if not rol:
-                db.rollback()
-                raise HTTPException(status_code=400, detail=f"Rol {id_rol} no encontrado")
-            db.add(UsuarioRol(id_usuario=usuario.id_usuario, id_rol=id_rol))
-            if rol.nombre == "alumno":
-                tiene_alumno = True
+        roles_map = {}
+        if data.roles:
+            roles_existentes = db.query(Rol).filter(Rol.id_rol.in_(data.roles)).all()
+            roles_map = {r.id_rol: r for r in roles_existentes}
+            for id_rol in data.roles:
+                rol = roles_map.get(id_rol)
+                if not rol:
+                    db.rollback()
+                    raise HTTPException(status_code=400, detail=f"Rol {id_rol} no encontrado")
+                db.add(UsuarioRol(id_usuario=usuario.id_usuario, id_rol=id_rol))
+                if rol.nombre == "alumno":
+                    tiene_alumno = True
 
         if not tiene_alumno:
             rol_alumno = db.query(Rol).filter(Rol.nombre == "alumno").first()
@@ -165,13 +194,6 @@ def crear_usuario(
         db.flush()
 
         if data.ci:
-            if tiene_alumno or not any(
-                db.query(Rol).filter(Rol.id_rol == id_rol).first().nombre == "alumno"
-                for id_rol in data.roles
-                if db.query(Rol).filter(Rol.id_rol == id_rol).first()
-            ):
-                pass
-
             ya_tiene_alumno = db.query(Alumno).filter(Alumno.id_usuario == usuario.id_usuario).first()
             if not ya_tiene_alumno:
                 db.add(Alumno(
@@ -184,7 +206,7 @@ def crear_usuario(
                 ))
 
             for id_rol in data.roles:
-                rol = db.query(Rol).filter(Rol.id_rol == id_rol).first()
+                rol = roles_map.get(id_rol)
                 if not rol:
                     continue
                 if rol.nombre == "docente":
@@ -309,10 +331,12 @@ def actualizar_roles_usuario(
     if id_usuario == current_user.id_usuario:
         raise HTTPException(status_code=400, detail="No podés cambiar tus propios roles desde aquí")
 
+    roles_existentes = db.query(Rol).filter(Rol.id_rol.in_(data.roles)).all()
+    roles_map = {r.id_rol: r for r in roles_existentes}
+
     tiene_alumno = any(
-        db.query(Rol).filter(Rol.id_rol == id_rol).first().nombre == "alumno"
+        roles_map.get(id_rol, None) and roles_map[id_rol].nombre == "alumno"
         for id_rol in data.roles
-        if db.query(Rol).filter(Rol.id_rol == id_rol).first()
     )
     if not tiene_alumno:
         raise HTTPException(status_code=400, detail="Todo usuario debe mantener el rol de estudiante como base")
@@ -321,7 +345,7 @@ def actualizar_roles_usuario(
         db.query(UsuarioRol).filter(UsuarioRol.id_usuario == id_usuario).delete()
 
         for id_rol in data.roles:
-            rol = db.query(Rol).filter(Rol.id_rol == id_rol).first()
+            rol = roles_map.get(id_rol)
             if not rol:
                 db.rollback()
                 raise HTTPException(status_code=400, detail=f"Rol {id_rol} no encontrado")

@@ -6,11 +6,13 @@ from schemas.alumno import AlumnoResponse
 from schemas.modalidad_academica import ModalidadAcademicaResponse
 from schemas.programa_version_edicion import ProgramaVersionEdicionResponse
 from schemas.tipo_descuento import TipoDescuentoResponse
+from schemas.control_documentacion import ControlDocumentacionResponse
 
 class EstadoDetalleAlumnoEnum(str, Enum):
     postulante = "postulante"
     observado = "observado"
     inscrito = "inscrito"
+    incorporado = "incorporado"
     en_curso = "en_curso"
     finalizado = "finalizado"
     graduado = "graduado"
@@ -23,6 +25,7 @@ class DetalleProgramaAlumnoBase(BaseModel):
     id_modalidad_academica: int
     id_tipo_descuento: int | None = None
     descuento_aplicado: Decimal = Decimal("0.00")
+    modulo_inicio: int = 1
     estado: EstadoDetalleAlumnoEnum = EstadoDetalleAlumnoEnum.postulante
     fecha_inscripcion: date | None = None
 
@@ -38,7 +41,7 @@ class DetalleProgramaAlumnoCreate(DetalleProgramaAlumnoBase):
 
 class DetalleProgramaAlumnoUpdate(BaseModel):
     id_tipo_descuento: int | None = None
-    descuento_aplicado: Decimal | None = None
+    modulo_inicio: int | None = None
     estado: EstadoDetalleAlumnoEnum | None = None
     fecha_inscripcion: date | None = None
 
@@ -48,7 +51,44 @@ class DetalleProgramaAlumnoResponse(DetalleProgramaAlumnoBase):
     modalidad_academica: ModalidadAcademicaResponse
     programa_version_edicion: ProgramaVersionEdicionResponse | None = None
     tipo_descuento: TipoDescuentoResponse | None = None
+    control_documentacion: list[ControlDocumentacionResponse] = []
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AlumnoBasico(BaseModel):
+    id_alumno: int
+    nombre: str
+    apellido: str
+    ci: str | None = None
+    correo: str | None = None
+
+
+class InscripcionEdicionItem(BaseModel):
+    id_detalle_programa_alumno: int
+    alumno: AlumnoBasico
+    estado: str
+    modalidad: str
+    descuento_aplicado: float
+    tipo_descuento: str | None = None
+    modulo_inicio: int
+    fecha_inscripcion: str | None = None
+    docs_completados: int
+    docs_total: int
+
+
+class PaginatedInscripcionesResponse(BaseModel):
+    items: list[InscripcionEdicionItem]
+    total: int
+    page: int
+    per_page: int
+    pages: int
+
+
+class TransferirInscripcionRequest(BaseModel):
+    id_programa_version_edicion_destino: int
+    motivo: str
+    id_modalidad_academica: int
+    id_tipo_descuento: int | None = None

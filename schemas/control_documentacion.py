@@ -37,3 +37,10 @@ class ControlDocumentacionResponse(ControlDocumentacionBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+class PaginatedControlDocumentacionResponse(BaseModel):
+    items: list[ControlDocumentacionResponse]
+    total: int
+    page: int
+    per_page: int
+    pages: int

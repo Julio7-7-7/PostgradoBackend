@@ -16,7 +16,6 @@ class Alumno(Base):
     celular = Column(String(20), nullable=True)
     correo = Column(String(100), nullable=False)
     direccion = Column(String(300), nullable=True)
-    estado = Column(String(20), nullable=False, default="activo")
     id_usuario = Column(Integer, ForeignKey("usuarios.id_usuario"), nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

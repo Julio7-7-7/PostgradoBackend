@@ -38,14 +38,19 @@ def verificar_disponibilidad(db, id_docente, id_detalle_modulo):
         ContratacionDocente.estado != "truncado",
     ).all()
 
-    # Regla 1: un módulo a la vez (sin solapamiento de fechas)
+    otros_detalle_ids = [c.id_detalle_modulo for c in activas if c.id_detalle_modulo != id_detalle_modulo]
+    otros_detalles_map = {}
+    if otros_detalle_ids:
+        otros_detalles = db.query(DetalleProgramaModulo).filter(
+            DetalleProgramaModulo.id_detalle_programa_modulo.in_(otros_detalle_ids)
+        ).all()
+        otros_detalles_map = {d.id_detalle_programa_modulo: d for d in otros_detalles}
+
     if nuevo_ini and nuevo_fin:
         for c in activas:
             if c.id_detalle_modulo == id_detalle_modulo:
                 continue
-            otro_detalle = db.query(DetalleProgramaModulo).filter(
-                DetalleProgramaModulo.id_detalle_programa_modulo == c.id_detalle_modulo
-            ).first()
+            otro_detalle = otros_detalles_map.get(c.id_detalle_modulo)
             if not otro_detalle:
                 continue
             if otro_detalle.fecha_inicio and otro_detalle.fecha_fin:

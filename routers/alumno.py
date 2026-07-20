@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from database import get_db
 from dependencies import get_current_user, require_permiso
 from models.alumno import Alumno
+from models.detalle_programa_alumno import DetalleProgramaAlumno
+from models.programa_version_edicion import ProgramaVersionEdicion
 from schemas.alumno import AlumnoCreate, AlumnoUpdate, AlumnoResponse
 from schemas.auth import UserResponse
 
@@ -33,6 +35,29 @@ def crear(data: AlumnoCreate, db: Session = Depends(get_db), current_user: UserR
 @router.get("/", response_model=list[AlumnoResponse])
 def listar(db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.ver"))):
     return db.query(Alumno).all()
+
+
+@router.get("/por-periodo", response_model=list[AlumnoResponse])
+def listar_por_periodo(
+    anio: int = Query(..., description="Año del período"),
+    semestre: int | None = Query(None, description="Semestre (1 o 2)"),
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(require_permiso("alumnos.ver"))
+):
+    ids_detalles = db.query(DetalleProgramaAlumno.id_alumno).join(
+        ProgramaVersionEdicion,
+        DetalleProgramaAlumno.id_programa_version_edicion == ProgramaVersionEdicion.id_programa_version_edicion
+    ).filter(
+        ProgramaVersionEdicion.anio == anio
+    )
+    if semestre is not None:
+        ids_detalles = ids_detalles.filter(ProgramaVersionEdicion.semestre == semestre)
+
+    ids_alumnos = [r[0] for r in ids_detalles.all()]
+    if not ids_alumnos:
+        return []
+
+    return db.query(Alumno).filter(Alumno.id_alumno.in_(ids_alumnos)).all()
 
 
 @router.get("/mi-perfil", response_model=AlumnoResponse)
@@ -107,12 +132,3 @@ def editar(id: int, data: AlumnoUpdate, db: Session = Depends(get_db), current_u
     db.commit()
     db.refresh(alumno)
     return alumno
-
-
-@router.delete("/{id}", status_code=204)
-def eliminar(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.editar"))):
-    alumno = db.query(Alumno).filter(Alumno.id_alumno == id).first()
-    if not alumno:
-        raise HTTPException(status_code=404, detail="No encontrado")
-    db.delete(alumno)
-    db.commit()
