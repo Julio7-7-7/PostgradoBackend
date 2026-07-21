@@ -160,7 +160,7 @@ def transcript_alumno(
     ).all() if modulo_ids else []
     modulo_info_map = {m.id_modulo: m for m in modulos}
 
-    inscripciones_items: list[InscripcionTranscriptItem] = []
+    inscripcion_items: list[InscripcionTranscriptItem] = []
     todas_notas: list[float] = []
 
     for ins in inscripciones:
@@ -177,30 +177,36 @@ def transcript_alumno(
                 nota_by_dpm[n.id_detalle_programa_modulo] = n
 
         avances_ins = avance_map.get(ins.id_detalle_programa_alumno, [])
+        avance_by_dpm: dict[int, AvanceModulo] = {a.id_detalle_programa_modulo: a for a in avances_ins}
+
+        todos_los_dpm = db.query(DetalleProgramaModulo).filter(
+            DetalleProgramaModulo.id_programa_version_edicion == ins.id_programa_version_edicion
+        ).order_by(DetalleProgramaModulo.orden).all()
+
         modulos_items: list[ModuloTranscriptItem] = []
         notas_finales: list[float] = []
 
-        for av in avances_ins:
-            dpm = dpm_map.get(av.id_detalle_programa_modulo)
-            if not dpm:
-                continue
+        for dpm in todos_los_dpm:
             mod = modulo_info_map.get(dpm.id_modulo)
-            nota_obj = nota_by_dpm.get(av.id_detalle_programa_modulo)
+            av = avance_by_dpm.get(dpm.id_detalle_programa_modulo)
+            nota_obj = nota_by_dpm.get(dpm.id_detalle_programa_modulo)
             nota_val = float(nota_obj.nota) if nota_obj else None
             nota_tipo = nota_obj.tipo if nota_obj else None
-            edicion_av = pve_map.get(av.completado_en_edicion)
+
+            completado_en = av.completado_en_edicion if av else None
+            edicion_av = pve_map.get(completado_en) if completado_en else None
 
             modulos_items.append(ModuloTranscriptItem(
-                id_detalle_programa_modulo=av.id_detalle_programa_modulo,
+                id_detalle_programa_modulo=dpm.id_detalle_programa_modulo,
                 modulo_nombre=mod.nombre_modulo if mod else f"Módulo #{dpm.id_modulo}",
                 modulo_orden=dpm.orden,
                 nota=nota_val,
                 nota_tipo=nota_tipo,
-                completado_en_edicion=av.completado_en_edicion,
+                completado_en_edicion=completado_en,
                 edicion_numero=edicion_av.edicion if edicion_av else None,
                 edicion_anio=edicion_av.anio if edicion_av else None,
                 edicion_semestre=edicion_av.semestre if edicion_av else None,
-                fecha_completion=av.fecha_completion,
+                fecha_completion=av.fecha_completion if av else None,
             ))
 
             if nota_val is not None and nota_tipo == "final":
@@ -209,7 +215,7 @@ def transcript_alumno(
         promedio_ins = round(sum(notas_finales) / len(notas_finales), 2) if notas_finales else None
         todas_notas.extend(notas_finales)
 
-        inscripciones_items.append(InscripcionTranscriptItem(
+        inscripcion_items.append(InscripcionTranscriptItem(
             id_detalle_programa_alumno=ins.id_detalle_programa_alumno,
             estado=ins.estado,
             edicion_id=ins.id_programa_version_edicion,
@@ -218,6 +224,7 @@ def transcript_alumno(
             edicion_semestre=pve.semestre if pve else None,
             programa_nombre=prog.nombre_programa if prog else "N/A",
             modalidad_nombre=modalidad.nombre_modalidad if modalidad else "N/A",
+            modulo_inicio=ins.modulo_inicio or 1,
             modulos=modulos_items,
             promedio=promedio_ins,
         ))
@@ -229,6 +236,6 @@ def transcript_alumno(
         alumno_nombre=alumno.nombre,
         alumno_apellido=alumno.apellido,
         alumno_ci=alumno.ci,
-        inscripciones=inscripciones_items,
+        inscripciones=inscripcion_items,
         promedio_general=promedio_general,
     )

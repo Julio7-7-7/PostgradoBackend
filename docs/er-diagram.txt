@@ -205,3 +205,58 @@
           │
           ▼
   Si TODOS los obligatorios = "aceptado" → estado = "inscrito"
+
+
+  ┌─────────────────────────────────────────────────────────────────────────────┐
+  │                            PAGOS                                            │
+  └─────────────────────────────────────────────────────────────────────────────┘
+
+  DETALLE_PROGRAMA_ALUMNO            PAGOS
+  ┌──────────────────────┐          ┌──────────────────────┐
+  │ PK id_detalle_p_a    │   1  N   │ PK id_pago           │
+  │ ...                  │◄─────────│ FK id_detalle_p_a    │
+  └──────────────────────┘          │    monto NUMERIC(10,2)│
+                                    │    fecha_pago DATE    │
+                                    │    concepto VARCHAR   │
+                                    │    comprobante_url    │
+                                    │    numero_referencia  │
+                                    │    estado VARCHAR     │
+                                    │    observaciones TEXT  │
+                                    │    created_at         │
+                                    │    updated_at         │
+                                    └──────────────────────┘
+
+  Campo                   Tipo            FK      Nullable    Default
+  ─────────────────────────────────────────────────────────────────────
+  id_pago                 INT             —       NO          autoincrement
+  id_detalle_programa_alumno INT          → DPA   NO          —
+  monto                   NUMERIC(10,2)   —       NO          —
+  fecha_pago              DATE            —       NO          —
+  concepto                VARCHAR(100)    —       NO          —
+  comprobante_url         VARCHAR(500)    —       SÍ          NULL
+  numero_referencia       VARCHAR(100)    —       SÍ          NULL
+  estado                  VARCHAR(20)     —       NO          'pendiente'
+  observaciones           TEXT            —       SÍ          NULL
+  created_at              TIMESTAMP       —       NO          NOW()
+  updated_at              TIMESTAMP       —       NO          NOW()
+
+  Para qué sirve cada campo:
+  ─────────────────────────────────────────────────────────────────────
+  id_pago                 Identificador único del pago
+  id_detalle_programa_alumno  A qué inscripción pertenece — vincula el
+                          pago con el estudiante inscrito en una edición
+  monto                   Cuánto se pagó — el monto en bolivianos
+  fecha_pago              Cuándo se pagó — fecha de realización
+  concepto                Para qué es el pago — ej: "Cuota 1", "Matrícula"
+  comprobante_url         Foto/PDF del comprobante de pago subido al server
+  numero_referencia       Número de transacción bancaria, comprobante, etc.
+  estado                  "pendiente", "aprobado", "rechazado"
+  observaciones           Notas de texto libre sobre el pago
+  created_at              Auditoría automática
+  updated_at              Auditoría automática
+
+  Cardinalidad:
+  ─────────────────────────────────────────────────────────────────────
+  pagos N:1 → detalle_programa_alumno
+  Un estudiante inscrito puede tener muchos pagos (cuotas),
+  cada pago pertenece a una sola inscripción.
