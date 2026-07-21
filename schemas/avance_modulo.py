@@ -26,7 +26,7 @@ class ModuloTranscriptItem(BaseModel):
     modulo_orden: int
     nota: float | None
     nota_tipo: str | None
-    completado_en_edicion: int
+    completado_en_edicion: int | None
     edicion_numero: int | None
     edicion_anio: int | None
     edicion_semestre: int | None
@@ -42,6 +42,7 @@ class InscripcionTranscriptItem(BaseModel):
     edicion_semestre: int | None
     programa_nombre: str
     modalidad_nombre: str
+    modulo_inicio: int
     modulos: list[ModuloTranscriptItem]
     promedio: float | None
 

@@ -27,7 +27,7 @@ def stats(db: Session = Depends(get_db), current_user: UserResponse = Depends(re
 
     total_inscripciones = db.query(func.count(DetalleProgramaAlumno.id_detalle_programa_alumno)).scalar() or 0
     inscripciones_activas = db.query(func.count(DetalleProgramaAlumno.id_detalle_programa_alumno)).filter(
-        DetalleProgramaAlumno.estado.in_(["inscrito", "en_curso"])
+        DetalleProgramaAlumno.estado.in_(["inscrito", "incorporado"])
     ).scalar() or 0
 
     total_pagos_confirmados = db.query(func.count(Pago.id_pago)).filter(

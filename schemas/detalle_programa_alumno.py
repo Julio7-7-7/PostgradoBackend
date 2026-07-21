@@ -13,10 +13,8 @@ class EstadoDetalleAlumnoEnum(str, Enum):
     observado = "observado"
     inscrito = "inscrito"
     incorporado = "incorporado"
-    en_curso = "en_curso"
     finalizado = "finalizado"
     graduado = "graduado"
-    titulado = "titulado"
     retirado = "retirado"
 
 class DetalleProgramaAlumnoBase(BaseModel):
@@ -92,3 +90,4 @@ class TransferirInscripcionRequest(BaseModel):
     motivo: str
     id_modalidad_academica: int
     id_tipo_descuento: int | None = None
+    modulo_inicio: int = 1

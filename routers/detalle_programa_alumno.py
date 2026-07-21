@@ -33,13 +33,11 @@ router = APIRouter(
 TRANSICIONES_ESTADO = {
     "postulante": ["observado", "inscrito", "retirado"],
     "observado": ["inscrito", "postulante", "retirado"],
-    "inscrito": ["en_curso", "incorporado", "retirado"],
-    "incorporado": ["en_curso", "retirado"],
-    "en_curso": ["finalizado", "incorporado", "retirado"],
+    "inscrito": ["incorporado", "finalizado", "retirado"],
+    "incorporado": ["finalizado", "retirado"],
     "finalizado": ["graduado"],
-    "graduado": ["titulado"],
+    "graduado": [],
     "retirado": [],
-    "titulado": [],
 }
 
 
@@ -559,11 +557,11 @@ def transferir(
     if not origen:
         raise HTTPException(status_code=404, detail="Inscripción origen no encontrada")
 
-    if origen.estado not in ("en_curso", "incorporado"):
+    if origen.estado not in ("inscrito", "incorporado"):
         raise HTTPException(
             status_code=400,
             detail=f"No se puede transferir una inscripción con estado '{origen.estado}'. "
-                   f"Debe estar en 'en_curso' o 'incorporado'."
+                   f"Debe estar en 'inscrito' o 'incorporado'."
         )
 
     pve_destino = db.query(ProgramaVersionEdicion).filter(
@@ -613,13 +611,19 @@ def transferir(
         td = _validar_descuento(data.id_tipo_descuento, data.id_modalidad_academica, origen.id_alumno, db)
         descuento_aplicado = td.porcentaje
 
+    if data.modulo_inicio < 1:
+        raise HTTPException(
+            status_code=400,
+            detail="El módulo de inicio debe ser mayor o igual a 1"
+        )
+
     destino = DetalleProgramaAlumno(
         id_programa_version_edicion=data.id_programa_version_edicion_destino,
         id_alumno=origen.id_alumno,
         id_modalidad_academica=data.id_modalidad_academica,
         id_tipo_descuento=data.id_tipo_descuento,
         descuento_aplicado=descuento_aplicado,
-        modulo_inicio=1,
+        modulo_inicio=data.modulo_inicio,
         estado="incorporado",
         fecha_inscripcion=date.today(),
     )
@@ -652,3 +656,63 @@ def transferir(
             DetalleProgramaAlumno.id_detalle_programa_alumno == destino.id_detalle_programa_alumno
         )
     ).first()
+
+
+@router.get("/historial-transferencias/{id_alumno}")
+def historial_transferencias(
+    id_alumno: int,
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(require_permiso("alumnos.ver"))
+):
+    inscripciones = db.query(DetalleProgramaAlumno).filter(
+        DetalleProgramaAlumno.id_alumno == id_alumno,
+    ).all()
+
+    dpa_ids = [i.id_detalle_programa_alumno for i in inscripciones]
+    transferencias = db.query(HistorialInscripcion).filter(
+        (HistorialInscripcion.id_detalle_origen.in_(dpa_ids)) |
+        (HistorialInscripcion.id_detalle_destino.in_(dpa_ids))
+    ).all() if dpa_ids else []
+
+    pve_ids = list({i.id_programa_version_edicion for i in inscripciones})
+    pves = db.query(ProgramaVersionEdicion).options(
+        joinedload(ProgramaVersionEdicion.programa_version)
+            .joinedload(ProgramaVersion.programa)
+    ).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion.in_(pve_ids)
+    ).all() if pve_ids else []
+    pve_map = {p.id_programa_version_edicion: p for p in pves}
+
+    ins_map = {}
+    for i in inscripciones:
+        pve = pve_map.get(i.id_programa_version_edicion)
+        pv = pve.programa_version if pve else None
+        prog = pv.programa if pv else None
+        ins_map[i.id_detalle_programa_alumno] = {
+            "id_detalle_programa_alumno": i.id_detalle_programa_alumno,
+            "id_programa_version_edicion": i.id_programa_version_edicion,
+            "edicion_numero": pve.edicion if pve else 0,
+            "anio": pve.anio if pve else 0,
+            "semestre": pve.semestre if pve else 0,
+            "programa_nombre": prog.nombre_programa if prog else "N/A",
+            "estado": i.estado,
+            "modulo_inicio": i.modulo_inicio,
+        }
+
+    historial_data = []
+    for h in transferencias:
+        historial_data.append({
+            "id_historial": h.id_historial,
+            "origen": ins_map.get(h.id_detalle_origen, {}),
+            "destino": ins_map.get(h.id_detalle_destino, {}),
+            "motivo": h.motivo,
+            "fecha": str(h.created_at),
+        })
+
+    historial_data.sort(key=lambda x: x["fecha"])
+
+    return {
+        "id_alumno": id_alumno,
+        "inscripciones": list(ins_map.values()),
+        "transferencias": historial_data,
+    }
