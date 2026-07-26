@@ -15,6 +15,7 @@ from models.control_documentacion import ControlDocumentacion
 from models.requisito import Requisito
 from models.alumno import Alumno
 from models.historial_inscripcion import HistorialInscripcion
+from models.solicitud_incorporacion import SolicitudIncorporacion
 from schemas.detalle_programa_alumno import (
     DetalleProgramaAlumnoCreate, DetalleProgramaAlumnoUpdate, DetalleProgramaAlumnoResponse,
     InscripcionEdicionItem, PaginatedInscripcionesResponse, AlumnoBasico,
@@ -337,6 +338,11 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
 
     _validar_no_inscripcion_programa(current_user.id_profile, data.id_programa_version_edicion, db)
 
+    pve = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion == data.id_programa_version_edicion
+    ).first()
+    es_incorporacion = pve and pve.estado == "en_curso"
+
     modalidad = db.query(ModalidadAcademica).filter(
         ModalidadAcademica.id_modalidad_academica == data.id_modalidad_academica
     ).first()
@@ -364,10 +370,21 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
         descuento_aplicado=descuento_aplicado,
         modulo_inicio=modulo_inicio,
         estado="postulante",
+        es_incorporacion=es_incorporacion,
         fecha_inscripcion=date.today(),
     )
     db.add(nuevo)
     db.flush()
+
+    if es_incorporacion:
+        solicitud = SolicitudIncorporacion(
+            id_detalle_programa_alumno=nuevo.id_detalle_programa_alumno,
+            id_alumno=current_user.id_profile,
+            id_programa_version_edicion=data.id_programa_version_edicion,
+            tipo_documento="Carta de Solicitud de Incorporación",
+            estado="pendiente",
+        )
+        db.add(solicitud)
 
     generar_control_documentacion(nuevo.id_detalle_programa_alumno, data.id_modalidad_academica, db)
 

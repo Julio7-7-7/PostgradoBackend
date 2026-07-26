@@ -66,16 +66,6 @@ def _solicitar_primera_incorporacion(alumno_id, carta_url, requisito, data, db):
             detail="La solicitud de incorporación solo está disponible para ediciones en curso"
         )
 
-    existente_dpa = db.query(DetalleProgramaAlumno).filter(
-        DetalleProgramaAlumno.id_alumno == alumno_id,
-        DetalleProgramaAlumno.id_programa_version_edicion == data.id_programa_version_edicion,
-    ).first()
-    if existente_dpa:
-        raise HTTPException(
-            status_code=400,
-            detail="Ya tenés una inscripción en esta edición del programa"
-        )
-
     pv = pve.programa_version
     inscripcion_activa = db.query(DetalleProgramaAlumno).join(
         ProgramaVersionEdicion,
@@ -91,6 +81,49 @@ def _solicitar_primera_incorporacion(alumno_id, carta_url, requisito, data, db):
             status_code=400,
             detail="Ya tenés una inscripción activa en otra edición de este programa"
         )
+
+    existente_dpa = db.query(DetalleProgramaAlumno).filter(
+        DetalleProgramaAlumno.id_alumno == alumno_id,
+        DetalleProgramaAlumno.id_programa_version_edicion == data.id_programa_version_edicion,
+    ).first()
+
+    if existente_dpa:
+        solicitud_previa = db.query(SolicitudIncorporacion).filter(
+            SolicitudIncorporacion.id_detalle_programa_alumno == existente_dpa.id_detalle_programa_alumno,
+        ).first()
+
+        if solicitud_previa and solicitud_previa.estado == "pendiente":
+            raise HTTPException(
+                status_code=400,
+                detail="Ya tenés una solicitud de incorporación pendiente para esta edición"
+            )
+
+        if solicitud_previa:
+            solicitud_previa.url_documento = carta_url
+            solicitud_previa.estado = "pendiente"
+            solicitud_previa.fecha_entrega = date.today()
+            solicitud_previa.fecha_revision = None
+            solicitud_previa.observaciones = None
+            if requisito:
+                solicitud_previa.id_requisito = requisito.id_requisito
+                solicitud_previa.tipo_documento = requisito.nombre
+            db.commit()
+            db.refresh(solicitud_previa)
+            return solicitud_previa
+
+        solicitud = SolicitudIncorporacion(
+            id_detalle_programa_alumno=existente_dpa.id_detalle_programa_alumno,
+            id_alumno=alumno_id,
+            id_programa_version_edicion=data.id_programa_version_edicion,
+            id_requisito=data.id_requisito if requisito else None,
+            tipo_documento=requisito.nombre if requisito else "Carta de Solicitud de Incorporación",
+            estado="pendiente",
+            url_documento=carta_url,
+        )
+        db.add(solicitud)
+        db.commit()
+        db.refresh(solicitud)
+        return solicitud
 
     solicitudes_previas = db.query(SolicitudIncorporacion).filter(
         SolicitudIncorporacion.id_alumno == alumno_id,
