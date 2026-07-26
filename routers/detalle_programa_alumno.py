@@ -15,7 +15,6 @@ from models.control_documentacion import ControlDocumentacion
 from models.requisito import Requisito
 from models.alumno import Alumno
 from models.historial_inscripcion import HistorialInscripcion
-from models.documento_incorporacion import DocumentoIncorporacion
 from schemas.detalle_programa_alumno import (
     DetalleProgramaAlumnoCreate, DetalleProgramaAlumnoUpdate, DetalleProgramaAlumnoResponse,
     InscripcionEdicionItem, PaginatedInscripcionesResponse, AlumnoBasico,
@@ -37,7 +36,7 @@ TRANSICIONES_ESTADO = {
     "incorporado": ["finalizado", "retirado"],
     "finalizado": ["graduado"],
     "graduado": [],
-    "retirado": [],
+    "retirado": ["postulante"],
 }
 
 
@@ -48,6 +47,36 @@ def _validar_transicion_estado(estado_actual, nuevo_estado):
         raise HTTPException(
             status_code=400,
             detail=f"No se puede cambiar de '{estado_actual}' a '{valor}'"
+        )
+
+
+ESTADOS_ACTIVOS_PROGRAMA = {"postulante", "observado", "inscrito", "incorporado", "finalizado", "graduado"}
+
+
+def _validar_no_inscripcion_programa(id_alumno: int, id_programa_version_edicion: int, db: Session):
+    """Un alumno no puede postularse a otra edición del mismo programa
+    mientras tenga una inscripción activa (no retirada) en cualquier edición."""
+    pve = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion == id_programa_version_edicion
+    ).first()
+    if not pve:
+        return
+
+    duplicado_programa = db.query(DetalleProgramaAlumno).join(
+        ProgramaVersionEdicion,
+        DetalleProgramaAlumno.id_programa_version_edicion == ProgramaVersionEdicion.id_programa_version_edicion
+    ).filter(
+        DetalleProgramaAlumno.id_alumno == id_alumno,
+        ProgramaVersionEdicion.id_programa_version == pve.id_programa_version,
+        DetalleProgramaAlumno.id_programa_version_edicion != id_programa_version_edicion,
+        DetalleProgramaAlumno.estado.in_(ESTADOS_ACTIVOS_PROGRAMA),
+    ).first()
+
+    if duplicado_programa:
+        raise HTTPException(
+            status_code=400,
+            detail="Ya tenés una inscripción activa en otra edición de este programa. "
+                   "Esperá a que sea rechazada o retirada para postularse nuevamente."
         )
 
 
@@ -235,6 +264,8 @@ def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db), curr
             detail="El alumno ya está inscrito en esta edición del programa"
         )
 
+    _validar_no_inscripcion_programa(data.id_alumno, data.id_programa_version_edicion, db)
+
     _validar_cupo(data.id_programa_version_edicion, db)
 
     descuento_aplicado = 0.0
@@ -304,6 +335,8 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
             detail="Ya estás postulado a esta edición del programa"
         )
 
+    _validar_no_inscripcion_programa(current_user.id_profile, data.id_programa_version_edicion, db)
+
     modalidad = db.query(ModalidadAcademica).filter(
         ModalidadAcademica.id_modalidad_academica == data.id_modalidad_academica
     ).first()
@@ -321,12 +354,15 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
         td = _validar_descuento(data.id_tipo_descuento, data.id_modalidad_academica, current_user.id_profile, db)
         descuento_aplicado = td.porcentaje
 
+    modulo_inicio = data.modulo_inicio if data.modulo_inicio >= 1 else 1
+
     nuevo = DetalleProgramaAlumno(
         id_programa_version_edicion=data.id_programa_version_edicion,
         id_alumno=current_user.id_profile,
         id_modalidad_academica=data.id_modalidad_academica,
         id_tipo_descuento=data.id_tipo_descuento,
         descuento_aplicado=descuento_aplicado,
+        modulo_inicio=modulo_inicio,
         estado="postulante",
         fecha_inscripcion=date.today(),
     )
@@ -438,6 +474,7 @@ def inscripciones_por_edicion(
             descuento_aplicado=float(reg.descuento_aplicado) if reg.descuento_aplicado else 0,
             tipo_descuento=tipo_desc.nombre if tipo_desc else None,
             modulo_inicio=reg.modulo_inicio,
+            es_incorporacion=reg.es_incorporacion,
             fecha_inscripcion=str(reg.fecha_inscripcion) if reg.fecha_inscripcion else None,
             docs_completados=docs_ok,
             docs_total=len(controles),
@@ -641,13 +678,6 @@ def transferir(
 
     if data.id_tipo_descuento:
         generar_control_descuento(destino.id_detalle_programa_alumno, data.id_modalidad_academica, data.id_tipo_descuento, db)
-
-    doc_carta = DocumentoIncorporacion(
-        id_detalle_programa_alumno=destino.id_detalle_programa_alumno,
-        tipo_documento="Carta de Solicitud de Incorporación",
-        estado="pendiente",
-    )
-    db.add(doc_carta)
 
     db.commit()
     db.refresh(destino)

@@ -1,5 +1,6 @@
 from fastapi import HTTPException
 from pathlib import Path
+from sqlalchemy.orm import Session
 import base64
 import math
 import uuid
@@ -113,3 +114,13 @@ def eliminar_foto(ruta: str | None):
         archivo = Path(__file__).parent.parent / ruta.lstrip("/")
         if archivo.exists():
             archivo.unlink()
+
+
+def es_alumno_actual(usuario, id_alumno: int, db: Session) -> bool:
+    from models.alumno import Alumno
+    if usuario.profile_type == "alumno" and usuario.id_profile == id_alumno:
+        return True
+    alumno = db.query(Alumno).filter(Alumno.id_alumno == id_alumno).first()
+    if not alumno or not alumno.id_usuario:
+        return False
+    return alumno.id_usuario == usuario.id_usuario

@@ -27,6 +27,5 @@ from models.administrativo import Administrativo
 from models.modalidad_tipo_programa import ModalidadTipoPrograma
 from models.pago import Pago
 from models.nota import Nota
-from models.avance_modulo import AvanceModulo
 from models.historial_inscripcion import HistorialInscripcion
-from models.documento_incorporacion import DocumentoIncorporacion
+from models.solicitud_incorporacion import SolicitudIncorporacion

@@ -97,3 +97,4 @@ class AutoInscribirRequest(BaseModel):
     id_programa_version_edicion: int
     id_modalidad_academica: int
     id_tipo_descuento: int | None = None
+    modulo_inicio: int = 1

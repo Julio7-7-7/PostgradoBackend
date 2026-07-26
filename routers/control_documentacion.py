@@ -13,7 +13,7 @@ from models.usuario_rol import UsuarioRol
 from models.requisito import Requisito
 from schemas.control_documentacion import ControlDocumentacionCreate, ControlDocumentacionUpdate, ControlDocumentacionResponse, PaginatedControlDocumentacionResponse
 from schemas.auth import UserResponse
-from routers.utils import guardar_documento_base64, eliminar_foto
+from routers.utils import guardar_documento_base64, eliminar_foto, es_alumno_actual
 
 router = APIRouter(
     prefix="/control-documentacion",
@@ -24,16 +24,6 @@ router = APIRouter(
 
 class SubirDocumentoRequest(BaseModel):
     url_documento: str
-
-
-def _es_alumno_actual(usuario: UserResponse, id_alumno: int, db: Session) -> bool:
-    """Check if the current user IS the student (even via different roles)."""
-    if usuario.profile_type == "alumno" and usuario.id_profile == id_alumno:
-        return True
-    alumno = db.query(Alumno).filter(Alumno.id_alumno == id_alumno).first()
-    if not alumno or not alumno.id_usuario:
-        return False
-    return alumno.id_usuario == usuario.id_usuario
 
 
 def verificar_inscripcion_automatica(id_detalle: int, db: Session):
@@ -182,7 +172,7 @@ def editar(id: int, data: ControlDocumentacionUpdate, db: Session = Depends(get_
         detalle = db.query(DetalleProgramaAlumno).filter(
             DetalleProgramaAlumno.id_detalle_programa_alumno == control.id_detalle_programa_alumno
         ).first()
-        if detalle and _es_alumno_actual(current_user, detalle.id_alumno, db):
+        if detalle and es_alumno_actual(current_user, detalle.id_alumno, db):
             raise HTTPException(status_code=403, detail="No podés aprobar o rechazar tu propia documentación")
         if not data.fecha_revision:
             data.fecha_revision = date.today()
