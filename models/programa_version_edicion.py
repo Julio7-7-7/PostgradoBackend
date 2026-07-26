@@ -25,6 +25,7 @@ class ProgramaVersionEdicion(Base):
     programa_version = relationship("ProgramaVersion", back_populates="ediciones")
     detalles_modulo = relationship("DetalleProgramaModulo", back_populates="programa_version_edicion")
     detalles_alumno = relationship("DetalleProgramaAlumno", back_populates="programa_version_edicion")
+    solicitudes_incorporacion = relationship("SolicitudIncorporacion", back_populates="programa_version_edicion")
 
     @property
     def gestion(self):

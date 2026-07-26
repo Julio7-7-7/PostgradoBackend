@@ -25,6 +25,7 @@ class DetalleProgramaAlumnoBase(BaseModel):
     descuento_aplicado: Decimal = Decimal("0.00")
     modulo_inicio: int = 1
     estado: EstadoDetalleAlumnoEnum = EstadoDetalleAlumnoEnum.postulante
+    es_incorporacion: bool = False
     fecha_inscripcion: date | None = None
 
     @field_validator("descuento_aplicado")
@@ -72,6 +73,7 @@ class InscripcionEdicionItem(BaseModel):
     descuento_aplicado: float
     tipo_descuento: str | None = None
     modulo_inicio: int
+    es_incorporacion: bool = False
     fecha_inscripcion: str | None = None
     docs_completados: int
     docs_total: int

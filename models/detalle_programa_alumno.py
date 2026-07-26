@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Numeric, String, Date, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, Numeric, String, Boolean, Date, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -14,6 +14,7 @@ class DetalleProgramaAlumno(Base):
     descuento_aplicado = Column(Numeric(5, 2), nullable=False, default=0.0)
     modulo_inicio = Column(Integer, nullable=False, default=1)
     estado = Column(String(20), nullable=False, default="postulante")
+    es_incorporacion = Column(Boolean, nullable=False, default=False)
     fecha_inscripcion = Column(Date, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
@@ -25,8 +26,7 @@ class DetalleProgramaAlumno(Base):
     control_documentacion = relationship("ControlDocumentacion", back_populates="detalle_programa_alumno", cascade="all, delete-orphan")
     pagos = relationship("Pago", back_populates="detalle_programa_alumno")
     notas = relationship("Nota", back_populates="detalle_programa_alumno")
-    avances = relationship("AvanceModulo", back_populates="detalle_programa_alumno", cascade="all, delete-orphan")
-    documentos_incorporacion = relationship("DocumentoIncorporacion", back_populates="detalle_programa_alumno", cascade="all, delete-orphan")
+    solicitudes_incorporacion = relationship("SolicitudIncorporacion", back_populates="detalle_programa_alumno", cascade="all, delete-orphan")
     transferencias_origen = relationship(
         "HistorialInscripcion",
         foreign_keys="HistorialInscripcion.id_detalle_origen",
