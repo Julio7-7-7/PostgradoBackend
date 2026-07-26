@@ -15,7 +15,6 @@ from models.control_documentacion import ControlDocumentacion
 from models.requisito import Requisito
 from models.alumno import Alumno
 from models.historial_inscripcion import HistorialInscripcion
-from models.solicitud_incorporacion import SolicitudIncorporacion
 from schemas.detalle_programa_alumno import (
     DetalleProgramaAlumnoCreate, DetalleProgramaAlumnoUpdate, DetalleProgramaAlumnoResponse,
     InscripcionEdicionItem, PaginatedInscripcionesResponse, AlumnoBasico,
@@ -113,7 +112,8 @@ def generar_control_documentacion(id_detalle: int, id_modalidad_academica: int, 
         return
     requisitos = db.query(Requisito).filter(
         Requisito.id_requisito.in_(requisito_ids),
-        Requisito.estado == "activo"
+        Requisito.estado == "activo",
+        Requisito.nombre != "Carta de Solicitud de Incorporación"
     ).all()
     for requisito in requisitos:
         control = ControlDocumentacion(
@@ -375,16 +375,6 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
     )
     db.add(nuevo)
     db.flush()
-
-    if es_incorporacion:
-        solicitud = SolicitudIncorporacion(
-            id_detalle_programa_alumno=nuevo.id_detalle_programa_alumno,
-            id_alumno=current_user.id_profile,
-            id_programa_version_edicion=data.id_programa_version_edicion,
-            tipo_documento="Carta de Solicitud de Incorporación",
-            estado="pendiente",
-        )
-        db.add(solicitud)
 
     generar_control_documentacion(nuevo.id_detalle_programa_alumno, data.id_modalidad_academica, db)
 

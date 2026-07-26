@@ -13,26 +13,13 @@ class SolicitudIncorporacion(Base):
         ForeignKey("detalle_programa_alumno.id_detalle_programa_alumno"),
         nullable=True,
     )
-    id_alumno = Column(
-        Integer,
-        ForeignKey("alumnos.id_alumno"),
-        nullable=True,
-    )
     id_programa_version_edicion = Column(
         Integer,
         ForeignKey("programa_version_edicion.id_programa_version_edicion"),
         nullable=True,
     )
-    id_requisito = Column(
-        Integer,
-        ForeignKey("requisitos.id_requisito"),
-        nullable=True,
-    )
-    tipo_documento = Column(String(100), nullable=False)
     estado = Column(String(20), nullable=False, default="pendiente")
-    url_documento = Column(String(500), nullable=True)
     observaciones = Column(Text, nullable=True)
-    fecha_entrega = Column(Date, nullable=True)
     fecha_revision = Column(Date, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(
@@ -42,8 +29,21 @@ class SolicitudIncorporacion(Base):
     detalle_programa_alumno = relationship(
         "DetalleProgramaAlumno", back_populates="solicitudes_incorporacion"
     )
-    alumno = relationship("Alumno", back_populates="solicitudes_incorporacion")
     programa_version_edicion = relationship(
         "ProgramaVersionEdicion", back_populates="solicitudes_incorporacion"
     )
+    documentos = relationship("SolicitudDocumento", back_populates="solicitud")
+
+
+class SolicitudDocumento(Base):
+    __tablename__ = "solicitud_documento"
+
+    id_solicitud_documento = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    id_solicitud = Column(Integer, ForeignKey("solicitud_incorporacion.id_solicitud"), nullable=False)
+    id_requisito = Column(Integer, ForeignKey("requisitos.id_requisito"), nullable=False)
+    url_documento = Column(String(500), nullable=False)
+    estado = Column(String(20), nullable=False, default="pendiente")
+    fecha_entrega = Column(DateTime, server_default=func.now(), nullable=False)
+
+    solicitud = relationship("SolicitudIncorporacion", back_populates="documentos")
     requisito = relationship("Requisito")

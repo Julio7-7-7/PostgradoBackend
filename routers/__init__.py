@@ -23,6 +23,7 @@ from routers import pago
 from routers import nota
 from routers import dashboard
 from routers import solicitud_incorporacion
+from routers import solicitud_requisito
 
 all_routers = [
     tipo_programa.router,
@@ -50,4 +51,5 @@ all_routers = [
     nota.router,
     dashboard.router,
     solicitud_incorporacion.router,
+    solicitud_requisito.router,
 ]

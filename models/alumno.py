@@ -21,5 +21,4 @@ class Alumno(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
     detalles_alumno = relationship("DetalleProgramaAlumno", back_populates="alumno")
-    solicitudes_incorporacion = relationship("SolicitudIncorporacion", back_populates="alumno")
     usuario = relationship("Usuario", back_populates="alumno")
