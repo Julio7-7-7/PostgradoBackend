@@ -7,22 +7,13 @@ from models.alumno import Alumno
 from models.detalle_programa_alumno import DetalleProgramaAlumno
 from schemas.pago import PagoCreate, PagoUpdate, PagoResponse
 from schemas.auth import UserResponse
-from routers.utils import eliminar_foto
+from routers.utils import eliminar_foto, es_alumno_actual
 
 router = APIRouter(
     prefix="/pagos",
     tags=["Pagos"],
     dependencies=[Depends(get_current_user)]
 )
-
-
-def _es_alumno_actual(usuario: UserResponse, id_alumno: int, db: Session) -> bool:
-    if usuario.profile_type == "alumno" and usuario.id_profile == id_alumno:
-        return True
-    alumno = db.query(Alumno).filter(Alumno.id_alumno == id_alumno).first()
-    if not alumno or not alumno.id_usuario:
-        return False
-    return alumno.id_usuario == usuario.id_usuario
 
 
 @router.get("/por-edicion/{id_edicion}")
@@ -114,7 +105,7 @@ def crear_pago(data: PagoCreate, db: Session = Depends(get_db), current_user: Us
     if float(data.monto) <= 0:
         raise HTTPException(status_code=400, detail="El monto debe ser mayor a 0")
 
-    if _es_alumno_actual(current_user, detalle.id_alumno, db):
+    if es_alumno_actual(current_user, detalle.id_alumno, db):
         raise HTTPException(status_code=403, detail="No podés registrar pagos para tu propia inscripción")
 
     nuevo = Pago(**data.model_dump())
@@ -138,7 +129,7 @@ def editar_pago(
     detalle_pago = db.query(DetalleProgramaAlumno).filter(
         DetalleProgramaAlumno.id_detalle_programa_alumno == pago.id_detalle_programa_alumno
     ).first()
-    if detalle_pago and _es_alumno_actual(current_user, detalle_pago.id_alumno, db):
+    if detalle_pago and es_alumno_actual(current_user, detalle_pago.id_alumno, db):
         raise HTTPException(status_code=403, detail="No podés modificar pagos de tu propia inscripción")
 
     if data.monto is not None and float(data.monto) <= 0:
