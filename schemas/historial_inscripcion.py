@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict
 class HistorialInscripcionCreate(BaseModel):
     id_detalle_origen: int
     id_detalle_destino: int
+    tipo_movimiento: str = "transferencia"
     motivo: str
 
 
@@ -12,6 +13,7 @@ class HistorialInscripcionResponse(BaseModel):
     id_historial: int
     id_detalle_origen: int
     id_detalle_destino: int
+    tipo_movimiento: str
     motivo: str
     created_at: datetime
 
@@ -20,6 +22,7 @@ class HistorialInscripcionResponse(BaseModel):
 
 class HistorialInscripcionConDetalle(BaseModel):
     id_historial: int
+    tipo_movimiento: str
     motivo: str
     created_at: datetime
     origen_edicion_numero: int | None

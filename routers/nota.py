@@ -12,6 +12,7 @@ from models.programa_version_edicion import ProgramaVersionEdicion
 from models.programa_version import ProgramaVersion
 from models.programa import Programa
 from models.modalidad_academica import ModalidadAcademica
+from models.historial_inscripcion import HistorialInscripcion
 from schemas.nota import (
     NotaCreate, NotaUpdate, NotaResponse,
     NotaEdicionResponse, NotaDocenteResponse, NotaModuloResponse,
@@ -426,11 +427,49 @@ def transcript_alumno(
 
     notas = db.query(Nota).filter(
         Nota.id_detalle_programa_alumno.in_(inscripcion_ids)
-    ).all()
+    ).all() if inscripcion_ids else []
+
+    historiales = db.query(HistorialInscripcion).filter(
+        (HistorialInscripcion.id_detalle_destino.in_(inscripcion_ids))
+    ).all() if inscripcion_ids else []
+    historial_by_destino = {h.id_detalle_destino: h for h in historiales}
+    historial_by_origen = {h.id_detalle_origen: h for h in historiales}
+
+    origen_ids = {h.id_detalle_origen for h in historiales}
+    destino_ids = {h.id_detalle_destino for h in historiales}
+    origen_dpas_list = db.query(DetalleProgramaAlumno).filter(
+        DetalleProgramaAlumno.id_detalle_programa_alumno.in_(origen_ids)
+    ).all() if origen_ids else []
+    origen_dpa_map = {d.id_detalle_programa_alumno: d for d in origen_dpas_list}
+
+    destino_dpas_list = db.query(DetalleProgramaAlumno).filter(
+        DetalleProgramaAlumno.id_detalle_programa_alumno.in_(destino_ids)
+    ).all() if destino_ids else []
+    destino_dpa_map = {d.id_detalle_programa_alumno: d for d in destino_dpas_list}
+
+    notas_origen = db.query(Nota).filter(
+        Nota.id_detalle_programa_alumno.in_(origen_ids)
+    ).all() if origen_ids else []
 
     nota_map: dict[int, list[Nota]] = {}
     for n in notas:
         nota_map.setdefault(n.id_detalle_programa_alumno, []).append(n)
+
+    nota_origen_map: dict[int, list[Nota]] = {}
+    for n in notas_origen:
+        nota_origen_map.setdefault(n.id_detalle_programa_alumno, []).append(n)
+
+    all_origen_dpm_ids = {n.id_detalle_programa_modulo for n in notas_origen}
+    origen_dpms = db.query(DetalleProgramaModulo).filter(
+        DetalleProgramaModulo.id_detalle_programa_modulo.in_(all_origen_dpm_ids)
+    ).all() if all_origen_dpm_ids else []
+    origen_dpm_map = {dpm.id_detalle_programa_modulo: dpm for dpm in origen_dpms}
+
+    origen_modulo_ids = {dpm.id_modulo for dpm in origen_dpms}
+    origen_modulos = db.query(Modulo).filter(
+        Modulo.id_modulo.in_(origen_modulo_ids)
+    ).all() if origen_modulo_ids else []
+    origen_modulo_info_map = {m.id_modulo: m for m in origen_modulos}
 
     pve_ids = {i.id_programa_version_edicion for i in inscripciones}
     pves = db.query(ProgramaVersionEdicion).filter(
@@ -468,18 +507,18 @@ def transcript_alumno(
 
     dpm_map = {dpm.id_detalle_programa_modulo: dpm for dpm in dpm_list}
 
-    modulo_ids = {dpm.id_modulo for dpm in dpm_list}
-    modulos = db.query(Modulo).filter(
-        Modulo.id_modulo.in_(modulo_ids)
-    ).all() if modulo_ids else []
-    modulo_info_map = {m.id_modulo: m for m in modulos}
-
     todos_dpm = db.query(DetalleProgramaModulo).filter(
         DetalleProgramaModulo.id_programa_version_edicion.in_(pve_ids)
     ).order_by(DetalleProgramaModulo.orden).all() if pve_ids else []
     dpm_por_edicion: dict[int, list[DetalleProgramaModulo]] = {}
     for dpm in todos_dpm:
         dpm_por_edicion.setdefault(dpm.id_programa_version_edicion, []).append(dpm)
+
+    all_modulo_ids = {dpm.id_modulo for dpm in todos_dpm}
+    modulos = db.query(Modulo).filter(
+        Modulo.id_modulo.in_(all_modulo_ids)
+    ).all() if all_modulo_ids else []
+    modulo_info_map = {m.id_modulo: m for m in modulos}
 
     inscripcion_items: list[InscripcionTranscriptItem] = []
     todas_notas: list[float] = []
@@ -497,6 +536,43 @@ def transcript_alumno(
             if not existing or n.id_nota > existing.id_nota:
                 nota_by_dpm[n.id_detalle_programa_modulo] = n
 
+        historial = historial_by_destino.get(ins.id_detalle_programa_alumno)
+        historial_origen = historial_by_origen.get(ins.id_detalle_programa_alumno)
+
+        migrado_a_edicion_numero = None
+        migrado_a_edicion_anio = None
+        migrado_a_edicion_semestre = None
+        if historial_origen:
+            dpa_dest = destino_dpa_map.get(historial_origen.id_detalle_destino)
+            if dpa_dest:
+                pve_dest = pve_map.get(dpa_dest.id_programa_version_edicion)
+                if not pve_dest:
+                    pve_dest_obj = db.query(ProgramaVersionEdicion).get(dpa_dest.id_programa_version_edicion)
+                    pve_dest = pve_dest_obj
+                if pve_dest:
+                    migrado_a_edicion_numero = pve_dest.edicion
+                    migrado_a_edicion_anio = pve_dest.anio
+                    migrado_a_edicion_semestre = pve_dest.semestre
+
+        origen_nota_by_name: dict[str, tuple[float, int | None, int | None, int | None]] = {}
+        if historial:
+            notas_o = nota_origen_map.get(historial.id_detalle_origen, [])
+            nota_o_by_dpm: dict[int, Nota] = {}
+            for n in notas_o:
+                existing = nota_o_by_dpm.get(n.id_detalle_programa_modulo)
+                if not existing or n.id_nota > existing.id_nota:
+                    nota_o_by_dpm[n.id_detalle_programa_modulo] = n
+            for dpm_o_id, n_o in nota_o_by_dpm.items():
+                dpm_o = origen_dpm_map.get(dpm_o_id)
+                if dpm_o:
+                    mod_o = origen_modulo_info_map.get(dpm_o.id_modulo)
+                    nombre = mod_o.nombre_modulo if mod_o else None
+                    if nombre:
+                        origen_nota_by_name[nombre.lower()] = (
+                            float(n_o.nota),
+                            dpm_o.orden,
+                        )
+
         todos_los_dpm = dpm_por_edicion.get(ins.id_programa_version_edicion, [])
 
         modulos_items: list[ModuloTranscriptItem] = []
@@ -509,6 +585,23 @@ def transcript_alumno(
 
             pve_dpm = pve_map.get(dpm.id_programa_version_edicion)
 
+            es_migrada = False
+            edicion_origen_numero = None
+            edicion_origen_anio = None
+            edicion_origen_semestre = None
+
+            if nota_val is None and mod and historial:
+                nombre_lower = mod.nombre_modulo.lower()
+                if nombre_lower in origen_nota_by_name:
+                    nota_val_origen, _ = origen_nota_by_name[nombre_lower]
+                    nota_val = nota_val_origen
+                    es_migrada = True
+                    dpa_origen = origen_dpa_map.get(historial.id_detalle_origen) if historial else None
+                    pve_origen_h = pve_map.get(dpa_origen.id_programa_version_edicion) if dpa_origen else None
+                    edicion_origen_numero = pve_origen_h.edicion if pve_origen_h else None
+                    edicion_origen_anio = pve_origen_h.anio if pve_origen_h else None
+                    edicion_origen_semestre = pve_origen_h.semestre if pve_origen_h else None
+
             modulos_items.append(ModuloTranscriptItem(
                 id_detalle_programa_modulo=dpm.id_detalle_programa_modulo,
                 modulo_nombre=mod.nombre_modulo if mod else f"Módulo #{dpm.id_modulo}",
@@ -518,6 +611,13 @@ def transcript_alumno(
                 edicion_numero=pve_dpm.edicion if pve_dpm else None,
                 edicion_anio=pve_dpm.anio if pve_dpm else None,
                 edicion_semestre=pve_dpm.semestre if pve_dpm else None,
+                es_migrada=es_migrada,
+                edicion_origen_numero=edicion_origen_numero,
+                edicion_origen_anio=edicion_origen_anio,
+                edicion_origen_semestre=edicion_origen_semestre,
+                migrado_a_edicion_numero=migrado_a_edicion_numero,
+                migrado_a_edicion_anio=migrado_a_edicion_anio,
+                migrado_a_edicion_semestre=migrado_a_edicion_semestre,
             ))
 
             if nota_val is not None:
@@ -538,6 +638,9 @@ def transcript_alumno(
             modulo_inicio=ins.modulo_inicio or 1,
             modulos=modulos_items,
             promedio=promedio_ins,
+            migrado_a_edicion_numero=migrado_a_edicion_numero,
+            migrado_a_edicion_anio=migrado_a_edicion_anio,
+            migrado_a_edicion_semestre=migrado_a_edicion_semestre,
         ))
 
     promedio_general = redondear_nota(sum(todas_notas) / len(todas_notas)) if todas_notas else None

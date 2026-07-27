@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Text, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -18,6 +18,7 @@ class HistorialInscripcion(Base):
         ForeignKey("detalle_programa_alumno.id_detalle_programa_alumno"),
         nullable=False,
     )
+    tipo_movimiento = Column(String(20), nullable=False, default="transferencia")
     motivo = Column(Text, nullable=False)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 

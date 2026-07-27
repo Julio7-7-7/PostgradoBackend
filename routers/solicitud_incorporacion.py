@@ -593,6 +593,36 @@ def aprobar_solicitud(
         if dpa:
             alumno_id = dpa.id_alumno
 
+        dpa_origen = None
+        if alumno_id:
+            pve_origen_candidate = db.query(ProgramaVersionEdicion).filter(
+                ProgramaVersionEdicion.id_programa_version == pv.id_programa_version
+            ).all()
+            pve_ids_origen = [p.id_programa_version_edicion for p in pve_origen_candidate]
+            if pve_ids_origen:
+                dpa_origen = db.query(DetalleProgramaAlumno).filter(
+                    DetalleProgramaAlumno.id_alumno == alumno_id,
+                    DetalleProgramaAlumno.id_programa_version_edicion.in_(pve_ids_origen),
+                    DetalleProgramaAlumno.id_detalle_programa_alumno != (dpa.id_detalle_programa_alumno if dpa else -1),
+                    DetalleProgramaAlumno.estado.notin_(["retirado"]),
+                ).order_by(DetalleProgramaAlumno.id_detalle_programa_alumno.desc()).first()
+
+        if dpa_origen:
+            pve_origen = db.query(ProgramaVersionEdicion).filter(
+                ProgramaVersionEdicion.id_programa_version_edicion == dpa_origen.id_programa_version_edicion
+            ).first()
+            if pve_origen:
+                destino_antes = (
+                    pve.anio < pve_origen.anio or
+                    (pve.anio == pve_origen.anio and pve.semestre < pve_origen.semestre) or
+                    (pve.anio == pve_origen.anio and pve.semestre == pve_origen.semestre and pve.edicion < pve_origen.edicion)
+                )
+                if destino_antes:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"La edición destino (Ed. {pve.edicion}) es anterior a la edición de origen (Ed. {pve_origen.edicion}). No se puede volver a una edición anterior."
+                    )
+
         nuevo = DetalleProgramaAlumno(
             id_programa_version_edicion=data.id_programa_version_edicion,
             id_alumno=alumno_id,
@@ -606,6 +636,15 @@ def aprobar_solicitud(
         )
         db.add(nuevo)
         db.flush()
+
+        if dpa_origen:
+            historial = HistorialInscripcion(
+                id_detalle_origen=dpa_origen.id_detalle_programa_alumno,
+                id_detalle_destino=nuevo.id_detalle_programa_alumno,
+                tipo_movimiento="incorporacion",
+                motivo=data.motivo or "Incorporación a nueva edición",
+            )
+            db.add(historial)
 
         solicitud.id_detalle_programa_alumno = nuevo.id_detalle_programa_alumno
         solicitud.id_programa_version_edicion = data.id_programa_version_edicion
@@ -647,6 +686,212 @@ def aprobar_solicitud(
 
     items = _load_solicitudes_con_detalle([solicitud], db)
     return items[0]
+
+
+@router.get("/{id_solicitud}/preview-migracion")
+def preview_migracion(
+    id_solicitud: int,
+    id_programa_version_edicion: int = Query(...),
+    id_modalidad_academica: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(require_permiso("alumnos.editar")),
+):
+    from models.nota import Nota
+    from models.pago import Pago
+    from models.modalidad_academica import ModalidadAcademica
+    from models.detalle_programa_modulo import DetalleProgramaModulo
+    from models.modulo import Modulo
+    from schemas.enums import clasificar_nota
+
+    solicitud = db.query(SolicitudIncorporacion).options(
+        joinedload(SolicitudIncorporacion.documentos)
+    ).filter(
+        SolicitudIncorporacion.id_solicitud == id_solicitud
+    ).first()
+    if not solicitud:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+
+    if solicitud.estado != "pendiente":
+        raise HTTPException(status_code=400, detail="Solo se puede previsualizar solicitudes pendientes")
+
+    dpa_origen = None
+    if solicitud.id_detalle_programa_alumno:
+        dpa_origen = db.query(DetalleProgramaAlumno).filter(
+            DetalleProgramaAlumno.id_detalle_programa_alumno == solicitud.id_detalle_programa_alumno
+        ).first()
+
+    if not dpa_origen:
+        raise HTTPException(status_code=400, detail="No se encontró la inscripción origen del alumno")
+
+    alumno = db.query(Alumno).filter(Alumno.id_alumno == dpa_origen.id_alumno).first()
+    if not alumno:
+        raise HTTPException(status_code=404, detail="Alumno no encontrado")
+
+    pve_origen = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion == dpa_origen.id_programa_version_edicion
+    ).first()
+
+    pv_origen = pve_origen.programa_version if pve_origen else None
+    prog_origen = pv_origen.programa if pv_origen else None
+
+    notas_origen = db.query(Nota).filter(
+        Nota.id_detalle_programa_alumno == dpa_origen.id_detalle_programa_alumno
+    ).all()
+
+    dpm_ids_origen = {n.id_detalle_programa_modulo for n in notas_origen}
+    dpms_origen = db.query(DetalleProgramaModulo).filter(
+        DetalleProgramaModulo.id_detalle_programa_modulo.in_(dpm_ids_origen)
+    ).all() if dpm_ids_origen else []
+    dpm_origen_map = {dpm.id_detalle_programa_modulo: dpm for dpm in dpms_origen}
+
+    modulos_origen_ids = {dpm.id_modulo for dpm in dpms_origen}
+    modulos_origen = db.query(Modulo).filter(
+        Modulo.id_modulo.in_(modulos_origen_ids)
+    ).all() if modulos_origen_ids else []
+    modulo_origen_map = {m.id_modulo: m for m in modulos_origen}
+
+    nota_by_dpm: dict[int, Nota] = {}
+    for n in notas_origen:
+        existing = nota_by_dpm.get(n.id_detalle_programa_modulo)
+        if not existing or n.id_nota > existing.id_nota:
+            nota_by_dpm[n.id_detalle_programa_modulo] = n
+
+    notas_preview = []
+    for dpm in dpms_origen:
+        mod = modulo_origen_map.get(dpm.id_modulo)
+        nota_obj = nota_by_dpm.get(dpm.id_detalle_programa_modulo)
+        if nota_obj and mod:
+            nota_val = float(nota_obj.nota)
+            notas_preview.append({
+                "modulo_nombre": mod.nombre_modulo,
+                "modulo_orden": dpm.orden,
+                "nota": nota_val,
+                "calificacion": clasificar_nota(nota_val).value if nota_val is not None else None,
+            })
+    notas_preview.sort(key=lambda x: x["modulo_orden"])
+
+    pagos_origen = db.query(Pago).filter(
+        Pago.id_detalle_programa_alumno == dpa_origen.id_detalle_programa_alumno
+    ).all()
+
+    pagos_preview = []
+    for p in pagos_origen:
+        pagos_preview.append({
+            "concepto": p.concepto,
+            "monto": float(p.monto),
+            "estado": p.estado,
+            "fecha_pago": str(p.fecha_pago),
+        })
+
+    pve_destino = db.query(ProgramaVersionEdicion).options(
+        joinedload(ProgramaVersionEdicion.programa_version)
+            .joinedload(ProgramaVersion.programa)
+    ).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion == id_programa_version_edicion
+    ).first()
+    if not pve_destino:
+        raise HTTPException(status_code=404, detail="Edición destino no encontrada")
+
+    pv_destino = pve_destino.programa_version if pve_destino else None
+    prog_destino = pv_destino.programa if pv_destino else None
+
+    if pv_origen and pv_destino and pv_origen.id_programa_version != pv_destino.id_programa_version:
+        raise HTTPException(status_code=400, detail="La edición destino debe pertenecer al mismo programa")
+
+    modalidad = db.query(ModalidadAcademica).filter(
+        ModalidadAcademica.id_modalidad_academica == id_modalidad_academica
+    ).first()
+    if not modalidad or modalidad.estado != "activo":
+        raise HTTPException(status_code=400, detail="Modalidad académica no encontrada o inactiva")
+
+    dpms_destino = db.query(DetalleProgramaModulo).filter(
+        DetalleProgramaModulo.id_programa_version_edicion == id_programa_version_edicion
+    ).order_by(DetalleProgramaModulo.orden).all()
+
+    modulos_destino_ids = {dpm.id_modulo for dpm in dpms_destino}
+    modulos_destino = db.query(Modulo).filter(
+        Modulo.id_modulo.in_(modulos_destino_ids)
+    ).all() if modulos_destino_ids else []
+    modulo_destino_map = {m.id_modulo: m for m in modulos_destino}
+
+    nombres_origen = {modulo_origen_map.get(dpm.id_modulo).nombre_modulo.lower()
+                      for dpm in dpms_origen
+                      if modulo_origen_map.get(dpm.id_modulo)}
+
+    modulos_destino_preview = []
+    for dpm in dpms_destino:
+        mod = modulo_destino_map.get(dpm.id_modulo)
+        nombre = mod.nombre_modulo if mod else f"Módulo #{dpm.id_modulo}"
+        modulos_destino_preview.append({
+            "modulo_nombre": nombre,
+            "modulo_orden": dpm.orden,
+            "match": nombre.lower() in nombres_origen,
+        })
+
+    from routers.detalle_programa_alumno import _validar_cupo
+    cupo_disponible = None
+    try:
+        cupo_disponible = pve_destino.cupo_maximo - db.query(sql_func.count(
+            DetalleProgramaAlumno.id_detalle_programa_alumno
+        )).filter(
+            DetalleProgramaAlumno.id_programa_version_edicion == id_programa_version_edicion,
+            DetalleProgramaAlumno.estado.notin_(["retirado", "observado"]),
+        ).scalar()
+    except Exception:
+        pass
+
+    modalidades_pve = []
+    try:
+        from models.modalidad_tipo_programa import ModalidadTipoPrograma
+        mtp_list = db.query(ModalidadTipoPrograma).filter(
+            ModalidadTipoPrograma.id_tipo_programa == pv_destino.programa.id_tipo_programa
+        ).all() if pv_destino and pv_destino.programa else []
+        ma_ids = [mtp.id_modalidad_academica for mtp in mtp_list]
+        if ma_ids:
+            mas = db.query(ModalidadAcademica).filter(
+                ModalidadAcademica.id_modalidad_academica.in_(ma_ids),
+                ModalidadAcademica.estado == "activo",
+            ).all()
+            modalidades_pve = [{"id": m.id_modalidad_academica, "nombre": m.nombre_modalidad} for m in mas]
+    except Exception:
+        pass
+
+    notas_match_count = sum(1 for mp in modulos_destino_preview if mp["match"])
+
+    return {
+        "alumno": {
+            "id_alumno": alumno.id_alumno,
+            "nombre": alumno.nombre,
+            "apellido": alumno.apellido,
+            "ci": alumno.ci,
+        },
+        "origen": {
+            "id_detalle_programa_alumno": dpa_origen.id_detalle_programa_alumno,
+            "edicion_numero": pve_origen.edicion if pve_origen else None,
+            "edicion_anio": pve_origen.anio if pve_origen else None,
+            "edicion_semestre": pve_origen.semestre if pve_origen else None,
+            "notas": notas_preview,
+            "pagos": pagos_preview,
+            "total_notas": len(notas_preview),
+            "total_pagos": len(pagos_preview),
+            "monto_total_pagos": sum(float(p.monto) for p in pagos_origen if p.estado == "aprobado"),
+        },
+        "destino": {
+            "id_programa_version_edicion": pve_destino.id_programa_version_edicion,
+            "edicion_numero": pve_destino.edicion,
+            "edicion_anio": pve_destino.anio,
+            "edicion_semestre": pve_destino.semestre,
+            "modulos": modulos_destino_preview,
+            "precio": pve_destino.precio,
+            "cupo_disponible": cupo_disponible,
+            "modalidades": modalidades_pve,
+        },
+        "resumen": {
+            "notas_a_migrar": notas_match_count,
+            "pagos_a_migrar": len(pagos_preview),
+            "monto_a_migrar": sum(float(p.monto) for p in pagos_origen if p.estado == "aprobado"),
+        },
+    }
 
 
 class SubirDocumentoSolicitud(BaseModel):

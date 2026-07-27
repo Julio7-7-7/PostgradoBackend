@@ -677,6 +677,7 @@ def transferir(
     historial = HistorialInscripcion(
         id_detalle_origen=origen.id_detalle_programa_alumno,
         id_detalle_destino=destino.id_detalle_programa_alumno,
+        tipo_movimiento="transferencia",
         motivo=data.motivo,
     )
     db.add(historial)
@@ -740,6 +741,7 @@ def historial_transferencias(
     for h in transferencias:
         historial_data.append({
             "id_historial": h.id_historial,
+            "tipo_movimiento": h.tipo_movimiento,
             "origen": ins_map.get(h.id_detalle_origen, {}),
             "destino": ins_map.get(h.id_detalle_destino, {}),
             "motivo": h.motivo,

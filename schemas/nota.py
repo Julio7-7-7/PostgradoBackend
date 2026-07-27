@@ -146,6 +146,13 @@ class ModuloTranscriptItem(BaseModel):
     edicion_numero: int | None
     edicion_anio: int | None
     edicion_semestre: int | None
+    es_migrada: bool = False
+    edicion_origen_numero: int | None = None
+    edicion_origen_anio: int | None = None
+    edicion_origen_semestre: int | None = None
+    migrado_a_edicion_numero: int | None = None
+    migrado_a_edicion_anio: int | None = None
+    migrado_a_edicion_semestre: int | None = None
 
 
 class InscripcionTranscriptItem(BaseModel):
@@ -160,6 +167,9 @@ class InscripcionTranscriptItem(BaseModel):
     modulo_inicio: int
     modulos: list[ModuloTranscriptItem]
     promedio: float | None
+    migrado_a_edicion_numero: int | None = None
+    migrado_a_edicion_anio: int | None = None
+    migrado_a_edicion_semestre: int | None = None
 
 
 class EdicionInfoItem(BaseModel):

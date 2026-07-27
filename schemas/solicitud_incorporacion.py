@@ -16,6 +16,7 @@ class AprobarSolicitudRequest(BaseModel):
     id_modalidad_academica: int | None = None
     id_tipo_descuento: int | None = None
     modulo_inicio: int = 1
+    motivo: str = ""
 
 
 class SolicitudDocumentoResponse(BaseModel):
@@ -64,3 +65,53 @@ class SolicitudIncorporacionConDetalle(BaseModel):
     documentos: list[SolicitudDocumentoResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class NotaPreviewItem(BaseModel):
+    modulo_nombre: str
+    modulo_orden: int
+    nota: float
+    calificacion: str
+
+
+class PagoPreviewItem(BaseModel):
+    concepto: str
+    monto: float
+    estado: str
+    fecha_pago: str
+
+
+class ModuloDestinoItem(BaseModel):
+    modulo_nombre: str
+    modulo_orden: int
+    match: bool
+
+
+class PreviewOrigen(BaseModel):
+    id_detalle_programa_alumno: int
+    edicion_numero: int | None = None
+    edicion_anio: int | None = None
+    edicion_semestre: int | None = None
+    notas: list[NotaPreviewItem]
+    pagos: list[PagoPreviewItem]
+    total_notas: int
+    total_pagos: int
+    monto_total_pagos: float
+
+
+class PreviewDestino(BaseModel):
+    id_programa_version_edicion: int
+    edicion_numero: int | None = None
+    edicion_anio: int | None = None
+    edicion_semestre: int | None = None
+    modulos: list[ModuloDestinoItem]
+    precio: float | None = None
+    cupo_disponible: int | None = None
+    modalidades: list[dict] = []
+
+
+class PreviewMigracionResponse(BaseModel):
+    alumno: dict
+    origen: PreviewOrigen
+    destino: PreviewDestino
+    resumen: dict
