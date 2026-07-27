@@ -124,3 +124,30 @@ def es_alumno_actual(usuario, id_alumno: int, db: Session) -> bool:
     if not alumno or not alumno.id_usuario:
         return False
     return alumno.id_usuario == usuario.id_usuario
+
+
+def inferir_tipo_movimiento(dpa_origen, dpa_destino, db: Session) -> str:
+    if dpa_origen.id_detalle_programa_alumno == dpa_destino.id_detalle_programa_alumno:
+        return "reincorporacion"
+
+    from models.programa_version_edicion import ProgramaVersionEdicion
+    from models.programa_version import ProgramaVersion
+
+    pv_origen = db.query(ProgramaVersion).join(
+        ProgramaVersionEdicion,
+        ProgramaVersionEdicion.id_programa_version == ProgramaVersion.id_programa_version,
+    ).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion == dpa_origen.id_programa_version_edicion
+    ).first()
+
+    pv_destino = db.query(ProgramaVersion).join(
+        ProgramaVersionEdicion,
+        ProgramaVersionEdicion.id_programa_version == ProgramaVersion.id_programa_version,
+    ).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion == dpa_destino.id_programa_version_edicion
+    ).first()
+
+    if pv_origen and pv_destino and pv_origen.id_programa_version == pv_destino.id_programa_version:
+        return "migracion"
+
+    return "transferencia"

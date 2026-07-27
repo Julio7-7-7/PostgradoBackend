@@ -24,7 +24,7 @@ from schemas.solicitud_incorporacion import (
     SolicitudDocumentoResponse,
 )
 from schemas.auth import UserResponse
-from routers.utils import guardar_documento_base64, eliminar_foto
+from routers.utils import guardar_documento_base64, eliminar_foto, inferir_tipo_movimiento
 
 router = APIRouter(
     prefix="/solicitud-incorporacion",
@@ -53,9 +53,65 @@ def solicitar_incorporacion(
         return _solicitar_primera_incorporacion(alumno_id, carta_url, data, db)
 
 
-def _crear_documentos_solicitud(solicitud_id, carta_url, db):
+@router.get("/puede-migrar")
+def puede_migrar(
+    id_detalle_programa_alumno: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user),
+):
+    if current_user.profile_type != "alumno" or not current_user.id_profile:
+        raise HTTPException(status_code=400, detail="El usuario actual no es un alumno")
+
+    dpa = db.query(DetalleProgramaAlumno).filter(
+        DetalleProgramaAlumno.id_detalle_programa_alumno == id_detalle_programa_alumno,
+        DetalleProgramaAlumno.id_alumno == current_user.id_profile,
+    ).first()
+    if not dpa:
+        raise HTTPException(status_code=404, detail="Inscripción no encontrada")
+
+    pve = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion == dpa.id_programa_version_edicion
+    ).first()
+    if not pve:
+        raise HTTPException(status_code=404, detail="Edición no encontrada")
+
+    if pve.estado not in ("finalizado", "reprogramado"):
+        return {"puede": False, "motivo": "La edición aún está en curso"}
+
+    if dpa.estado in ("postulante", "observado"):
+        return {"puede": False, "motivo": "Tu inscripción aún no está activa"}
+
+    if dpa.estado == "retirado":
+        return {"puede": False, "motivo": "Estás retirado. Solicitá reincorporación en su lugar."}
+
+    pv = pve.programa_version
+    dpa_activo = db.query(DetalleProgramaAlumno).join(
+        ProgramaVersionEdicion,
+        DetalleProgramaAlumno.id_programa_version_edicion == ProgramaVersionEdicion.id_programa_version_edicion,
+    ).filter(
+        DetalleProgramaAlumno.id_alumno == current_user.id_profile,
+        ProgramaVersionEdicion.id_programa_version == pv.id_programa_version,
+        DetalleProgramaAlumno.estado.in_({"postulante", "observado", "inscrito"}),
+        DetalleProgramaAlumno.id_detalle_programa_alumno != dpa.id_detalle_programa_alumno,
+    ).first()
+    if dpa_activo:
+        return {"puede": False, "motivo": "Ya tenés una inscripción activa en otra edición de este programa"}
+
+    solicitud_pendiente = db.query(SolicitudIncorporacion).filter(
+        SolicitudIncorporacion.id_programa_version_edicion.is_(None),
+        SolicitudIncorporacion.estado == "pendiente",
+    ).join(
+        DetalleProgramaAlumno
+    ).filter(
+        DetalleProgramaAlumno.id_alumno == current_user.id_profile,
+    ).first()
+    if solicitud_pendiente:
+        return {"puede": False, "motivo": "Ya tenés una solicitud de migración pendiente"}
+
+    return {"puede": True, "motivo": None}
     configs = db.query(SolicitudRequisito).filter(
-        SolicitudRequisito.estado == "activo"
+        SolicitudRequisito.estado == "activo",
+        SolicitudRequisito.tipo == tipo,
     ).all()
 
     if not configs:
@@ -81,9 +137,10 @@ def _crear_documentos_solicitud(solicitud_id, carta_url, db):
         db.add(doc)
 
 
-def _sincronizar_documentos(solicitud, db):
+def _sincronizar_documentos(solicitud, db, tipo="incorporacion"):
     configs = db.query(SolicitudRequisito).filter(
-        SolicitudRequisito.estado == "activo"
+        SolicitudRequisito.estado == "activo",
+        SolicitudRequisito.tipo == tipo,
     ).all()
     existing_ids = {d.id_requisito for d in solicitud.documentos}
 
@@ -642,7 +699,7 @@ def aprobar_solicitud(
                 id_detalle_origen=dpa_origen.id_detalle_programa_alumno,
                 id_detalle_destino=nuevo.id_detalle_programa_alumno,
                 id_solicitud=solicitud.id_solicitud,
-                tipo_movimiento="migracion",
+                tipo_movimiento=inferir_tipo_movimiento(dpa_origen, nuevo, db),
                 motivo=data.motivo or None,
             )
             db.add(historial)

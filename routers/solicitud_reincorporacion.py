@@ -17,7 +17,7 @@ from schemas.solicitud_reincorporacion import (
     SolicitudReincorporacionDocumentoResponse,
 )
 from schemas.auth import UserResponse
-from routers.utils import guardar_documento_base64
+from routers.utils import guardar_documento_base64, inferir_tipo_movimiento
 
 router = APIRouter(
     prefix="/solicitud-reincorporacion",
@@ -248,7 +248,7 @@ def aprobar_solicitud_reincorporacion(
     historial = HistorialInscripcion(
         id_detalle_origen=dpa.id_detalle_programa_alumno,
         id_detalle_destino=dpa.id_detalle_programa_alumno,
-        tipo_movimiento="reincorporacion",
+        tipo_movimiento=inferir_tipo_movimiento(dpa, dpa, db),
         motivo=solicitud.motivo,
     )
     db.add(historial)
