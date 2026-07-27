@@ -10,5 +10,6 @@ class SolicitudRequisito(Base):
     id_requisito = Column(Integer, ForeignKey("requisitos.id_requisito"), nullable=False)
     obligatorio = Column(Boolean, nullable=False, default=True)
     estado = Column(String(20), nullable=False, default="activo")
+    tipo = Column(String(20), nullable=False, default="incorporacion")
 
     requisito = relationship("Requisito")

@@ -29,5 +29,5 @@ from models.pago import Pago
 from models.nota import Nota
 from models.historial_inscripcion import HistorialInscripcion
 from models.solicitud_incorporacion import SolicitudIncorporacion
-from models.solicitud_reincorporacion import SolicitudReincorporacion
+from models.solicitud_reincorporacion import SolicitudReincorporacion, SolicitudReincorporacionDocumento
 from models.solicitud_requisito import SolicitudRequisito

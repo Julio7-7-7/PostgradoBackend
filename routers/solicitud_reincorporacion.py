@@ -1,26 +1,48 @@
-from datetime import date
+from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func as sql_func
-import math
+import json
+
 from database import get_db
 from dependencies import get_current_user, require_permiso
-from models.solicitud_reincorporacion import SolicitudReincorporacion
+from models.solicitud_reincorporacion import SolicitudReincorporacion, SolicitudReincorporacionDocumento
+from models.solicitud_requisito import SolicitudRequisito
+from models.requisito import Requisito
 from models.detalle_programa_alumno import DetalleProgramaAlumno
-from models.alumno import Alumno
 from models.historial_inscripcion import HistorialInscripcion
 from schemas.solicitud_reincorporacion import (
     SolicitudReincorporacionCreate,
     SolicitudReincorporacionResponse,
     SolicitudReincorporacionConDetalle,
+    SolicitudReincorporacionDocumentoResponse,
 )
 from schemas.auth import UserResponse
+from routers.utils import guardar_documento_base64
 
 router = APIRouter(
     prefix="/solicitud-reincorporacion",
     tags=["Solicitud de Reincorporación"],
     dependencies=[Depends(get_current_user)],
 )
+
+
+def _cargar_documentos(solicitud: SolicitudReincorporacion, db: Session) -> list[SolicitudReincorporacionDocumentoResponse]:
+    req_ids = {d.id_requisito for d in solicitud.documentos}
+    requisitos_map = {}
+    if req_ids:
+        for r in db.query(Requisito).filter(Requisito.id_requisito.in_(req_ids)).all():
+            requisitos_map[r.id_requisito] = r.nombre
+    return [
+        SolicitudReincorporacionDocumentoResponse(
+            id_solicitud_reincorporacion_documento=doc.id_solicitud_reincorporacion_documento,
+            id_requisito=doc.id_requisito,
+            nombre_requisito=requisitos_map.get(doc.id_requisito, ""),
+            url_documento=doc.url_documento,
+            estado=doc.estado,
+            fecha_entrega=doc.fecha_entrega,
+        )
+        for doc in solicitud.documentos
+    ]
 
 
 @router.post("/solicitar/{id_dpa}", response_model=SolicitudReincorporacionResponse, status_code=201)
@@ -61,6 +83,21 @@ def solicitar_reincorporacion(
         motivo=data.motivo or None,
     )
     db.add(solicitud)
+    db.flush()
+
+    requisitos_config = db.query(SolicitudRequisito).filter(
+        SolicitudRequisito.estado == "activo",
+        SolicitudRequisito.tipo == "reincorporacion",
+    ).all()
+
+    for req_config in requisitos_config:
+        db.add(SolicitudReincorporacionDocumento(
+            id_solicitud_reincorporacion=solicitud.id_solicitud_reincorporacion,
+            id_requisito=req_config.id_requisito,
+            url_documento="",
+            estado="pendiente",
+        ))
+
     db.commit()
     db.refresh(solicitud)
 
@@ -72,7 +109,48 @@ def solicitar_reincorporacion(
         motivo_rechazo=solicitud.motivo_rechazo,
         created_at=solicitud.created_at,
         updated_at=solicitud.updated_at,
+        documentos=_cargar_documentos(solicitud, db),
     )
+
+
+@router.post("/{id_solicitud}/documentos/{id_doc}/subir")
+def subir_documento_reincorporacion(
+    id_solicitud: int,
+    id_doc: int,
+    body: dict = {},
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user),
+):
+    if current_user.profile_type != "alumno" or not current_user.id_profile:
+        raise HTTPException(status_code=400, detail="El usuario actual no es un alumno")
+
+    solicitud = db.query(SolicitudReincorporacion).filter(
+        SolicitudReincorporacion.id_solicitud_reincorporacion == id_solicitud,
+        SolicitudReincorporacion.estado == "pendiente",
+    ).first()
+    if not solicitud:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada o ya procesada")
+
+    doc = db.query(SolicitudReincorporacionDocumento).filter(
+        SolicitudReincorporacionDocumento.id_solicitud_reincorporacion_documento == id_doc,
+        SolicitudReincorporacionDocumento.id_solicitud_reincorporacion == id_solicitud,
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+
+    url_documento = body.get("url_documento", "")
+    if not url_documento:
+        raise HTTPException(status_code=400, detail="Se requiere url_documento")
+
+    url = guardar_documento_base64(url_documento, "reincorporacion")
+    doc.url_documento = url
+    doc.estado = "entregado"
+    doc.fecha_entrega = datetime.now()
+
+    db.commit()
+    db.refresh(doc)
+
+    return {"ok": True, "url": url}
 
 
 @router.get("/", response_model=list[SolicitudReincorporacionConDetalle])
@@ -84,8 +162,9 @@ def listar_solicitudes_reincorporacion(
     current_user: UserResponse = Depends(require_permiso("alumnos.ver")),
 ):
     q = db.query(SolicitudReincorporacion).options(
+        joinedload(SolicitudReincorporacion.documentos),
         joinedload(SolicitudReincorporacion.detalle_programa_alumno)
-        .joinedload(DetalleProgramaAlumno.alumno)
+        .joinedload(DetalleProgramaAlumno.alumno),
     )
 
     if estado:
@@ -93,7 +172,6 @@ def listar_solicitudes_reincorporacion(
 
     q = q.order_by(SolicitudReincorporacion.created_at.desc())
 
-    total = q.count()
     solicitudes = q.offset((page - 1) * per_page).limit(per_page).all()
 
     result = []
@@ -119,6 +197,7 @@ def listar_solicitudes_reincorporacion(
             edicion_anio=pve.anio if pve else None,
             edicion_semestre=pve.semestre if pve else None,
             programa_nombre=programa.nombre_programa if programa else None,
+            documentos=_cargar_documentos(s, db),
         ))
 
     return result
@@ -142,7 +221,9 @@ def aprobar_solicitud_reincorporacion(
     current_user: UserResponse = Depends(require_permiso("alumnos.editar")),
 ):
     solicitud = db.query(SolicitudReincorporacion).options(
+        joinedload(SolicitudReincorporacion.documentos),
         joinedload(SolicitudReincorporacion.detalle_programa_alumno)
+        .joinedload(DetalleProgramaAlumno.alumno),
     ).filter(
         SolicitudReincorporacion.id_solicitud_reincorporacion == id_solicitud
     ).first()
@@ -198,6 +279,7 @@ def aprobar_solicitud_reincorporacion(
         edicion_anio=pve.anio if pve else None,
         edicion_semestre=pve.semestre if pve else None,
         programa_nombre=programa.nombre_programa if programa else None,
+        documentos=_cargar_documentos(solicitud, db),
     )
 
 
@@ -209,7 +291,9 @@ def rechazar_solicitud_reincorporacion(
     current_user: UserResponse = Depends(require_permiso("alumnos.editar")),
 ):
     solicitud = db.query(SolicitudReincorporacion).options(
+        joinedload(SolicitudReincorporacion.documentos),
         joinedload(SolicitudReincorporacion.detalle_programa_alumno)
+        .joinedload(DetalleProgramaAlumno.alumno),
     ).filter(
         SolicitudReincorporacion.id_solicitud_reincorporacion == id_solicitud
     ).first()
@@ -247,6 +331,7 @@ def rechazar_solicitud_reincorporacion(
         edicion_anio=pve.anio if pve else None,
         edicion_semestre=pve.semestre if pve else None,
         programa_nombre=programa.nombre_programa if programa else None,
+        documentos=_cargar_documentos(solicitud, db),
     )
 
 
@@ -260,7 +345,9 @@ def mis_solicitudes_reincorporacion(
 
     alumno_id = current_user.id_profile
 
-    solicitudes = db.query(SolicitudReincorporacion).join(
+    solicitudes = db.query(SolicitudReincorporacion).options(
+        joinedload(SolicitudReincorporacion.documentos),
+    ).join(
         DetalleProgramaAlumno
     ).filter(
         DetalleProgramaAlumno.id_alumno == alumno_id,
@@ -275,6 +362,7 @@ def mis_solicitudes_reincorporacion(
             motivo_rechazo=s.motivo_rechazo,
             created_at=s.created_at,
             updated_at=s.updated_at,
+            documentos=_cargar_documentos(s, db),
         )
         for s in solicitudes
     ]

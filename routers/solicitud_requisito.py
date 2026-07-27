@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from database import get_db
 from dependencies import get_current_user, require_permiso
@@ -16,11 +16,13 @@ router = APIRouter(
 
 @router.get("/", response_model=list[SolicitudRequisitoResponse])
 def listar_requisitos(
+    tipo: str = Query("incorporacion"),
     db: Session = Depends(get_db),
     current_user: UserResponse = Depends(require_permiso("alumnos.editar")),
 ):
     items = db.query(SolicitudRequisito).filter(
-        SolicitudRequisito.estado == "activo"
+        SolicitudRequisito.estado == "activo",
+        SolicitudRequisito.tipo == tipo,
     ).all()
 
     requisito_ids = {i.id_requisito for i in items}
@@ -35,6 +37,7 @@ def listar_requisitos(
             id_requisito=i.id_requisito,
             obligatorio=i.obligatorio,
             estado=i.estado,
+            tipo=i.tipo,
             requisito_nombre=requisitos_map.get(i.id_requisito),
         )
         for i in items
@@ -50,9 +53,10 @@ def agregar_requisito(
     existente = db.query(SolicitudRequisito).filter(
         SolicitudRequisito.id_requisito == data.id_requisito,
         SolicitudRequisito.estado == "activo",
+        SolicitudRequisito.tipo == data.tipo,
     ).first()
     if existente:
-        raise HTTPException(status_code=400, detail="Este requisito ya está configurado para incorporación")
+        raise HTTPException(status_code=400, detail="Este requisito ya está configurado para este tipo de solicitud")
 
     requisito = db.query(Requisito).filter(Requisito.id_requisito == data.id_requisito).first()
     if not requisito:
@@ -61,6 +65,7 @@ def agregar_requisito(
     nuevo = SolicitudRequisito(
         id_requisito=data.id_requisito,
         obligatorio=data.obligatorio,
+        tipo=data.tipo,
     )
     db.add(nuevo)
     db.commit()
@@ -71,6 +76,7 @@ def agregar_requisito(
         id_requisito=nuevo.id_requisito,
         obligatorio=nuevo.obligatorio,
         estado=nuevo.estado,
+        tipo=nuevo.tipo,
         requisito_nombre=requisito.nombre,
     )
 

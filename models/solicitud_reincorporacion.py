@@ -4,6 +4,24 @@ from sqlalchemy.sql import func
 from database import Base
 
 
+class SolicitudReincorporacionDocumento(Base):
+    __tablename__ = "solicitud_reincorporacion_documento"
+
+    id_solicitud_reincorporacion_documento = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    id_solicitud_reincorporacion = Column(
+        Integer,
+        ForeignKey("solicitud_reincorporacion.id_solicitud_reincorporacion"),
+        nullable=False,
+    )
+    id_requisito = Column(Integer, ForeignKey("requisitos.id_requisito"), nullable=False)
+    url_documento = Column(String(500), nullable=False, default="")
+    estado = Column(String(20), nullable=False, default="pendiente")
+    fecha_entrega = Column(DateTime, server_default=func.now(), nullable=False)
+
+    solicitud = relationship("SolicitudReincorporacion", back_populates="documentos")
+    requisito = relationship("Requisito")
+
+
 class SolicitudReincorporacion(Base):
     __tablename__ = "solicitud_reincorporacion"
 
@@ -26,3 +44,4 @@ class SolicitudReincorporacion(Base):
         foreign_keys=[id_detalle_programa_alumno],
         back_populates="solicitudes_reincorporacion",
     )
+    documentos = relationship("SolicitudReincorporacionDocumento", back_populates="solicitud", cascade="all, delete-orphan")
