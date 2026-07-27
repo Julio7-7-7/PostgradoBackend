@@ -85,11 +85,3 @@ class PaginatedInscripcionesResponse(BaseModel):
     page: int
     per_page: int
     pages: int
-
-
-class TransferirInscripcionRequest(BaseModel):
-    id_programa_version_edicion_destino: int
-    motivo: str
-    id_modalidad_academica: int
-    id_tipo_descuento: int | None = None
-    modulo_inicio: int = 1

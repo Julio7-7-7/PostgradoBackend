@@ -641,8 +641,9 @@ def aprobar_solicitud(
             historial = HistorialInscripcion(
                 id_detalle_origen=dpa_origen.id_detalle_programa_alumno,
                 id_detalle_destino=nuevo.id_detalle_programa_alumno,
-                tipo_movimiento="incorporacion",
-                motivo=data.motivo or "Incorporación a nueva edición",
+                id_solicitud=solicitud.id_solicitud,
+                tipo_movimiento="migracion",
+                motivo=data.motivo or None,
             )
             db.add(historial)
 

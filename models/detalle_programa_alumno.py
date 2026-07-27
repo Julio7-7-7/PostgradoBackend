@@ -27,6 +27,7 @@ class DetalleProgramaAlumno(Base):
     pagos = relationship("Pago", back_populates="detalle_programa_alumno")
     notas = relationship("Nota", back_populates="detalle_programa_alumno")
     solicitudes_incorporacion = relationship("SolicitudIncorporacion", back_populates="detalle_programa_alumno", cascade="all, delete-orphan")
+    solicitudes_reincorporacion = relationship("SolicitudReincorporacion", back_populates="detalle_programa_alumno", cascade="all, delete-orphan")
     transferencias_origen = relationship(
         "HistorialInscripcion",
         foreign_keys="HistorialInscripcion.id_detalle_origen",

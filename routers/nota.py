@@ -410,7 +410,14 @@ def transcript_alumno(
     inscripciones = db.query(DetalleProgramaAlumno).filter(
         DetalleProgramaAlumno.id_alumno == id_alumno,
         DetalleProgramaAlumno.estado != "retirado",
-    ).order_by(DetalleProgramaAlumno.id_detalle_programa_alumno).all()
+    ).order_by(
+        ProgramaVersionEdicion.edicion,
+        ProgramaVersionEdicion.anio,
+        ProgramaVersionEdicion.semestre,
+    ).join(
+        ProgramaVersionEdicion,
+        ProgramaVersionEdicion.id_programa_version_edicion == DetalleProgramaAlumno.id_programa_version_edicion,
+    ).all()
 
     if not inscripciones:
         return TranscriptResponse(
@@ -464,12 +471,6 @@ def transcript_alumno(
         DetalleProgramaModulo.id_detalle_programa_modulo.in_(all_origen_dpm_ids)
     ).all() if all_origen_dpm_ids else []
     origen_dpm_map = {dpm.id_detalle_programa_modulo: dpm for dpm in origen_dpms}
-
-    origen_modulo_ids = {dpm.id_modulo for dpm in origen_dpms}
-    origen_modulos = db.query(Modulo).filter(
-        Modulo.id_modulo.in_(origen_modulo_ids)
-    ).all() if origen_modulo_ids else []
-    origen_modulo_info_map = {m.id_modulo: m for m in origen_modulos}
 
     pve_ids = {i.id_programa_version_edicion for i in inscripciones}
     pves = db.query(ProgramaVersionEdicion).filter(
@@ -554,7 +555,7 @@ def transcript_alumno(
                     migrado_a_edicion_anio = pve_dest.anio
                     migrado_a_edicion_semestre = pve_dest.semestre
 
-        origen_nota_by_name: dict[str, tuple[float, int | None, int | None, int | None]] = {}
+        origen_nota_by_id_modulo: dict[int, float] = {}
         if historial:
             notas_o = nota_origen_map.get(historial.id_detalle_origen, [])
             nota_o_by_dpm: dict[int, Nota] = {}
@@ -565,13 +566,7 @@ def transcript_alumno(
             for dpm_o_id, n_o in nota_o_by_dpm.items():
                 dpm_o = origen_dpm_map.get(dpm_o_id)
                 if dpm_o:
-                    mod_o = origen_modulo_info_map.get(dpm_o.id_modulo)
-                    nombre = mod_o.nombre_modulo if mod_o else None
-                    if nombre:
-                        origen_nota_by_name[nombre.lower()] = (
-                            float(n_o.nota),
-                            dpm_o.orden,
-                        )
+                    origen_nota_by_id_modulo[dpm_o.id_modulo] = float(n_o.nota)
 
         todos_los_dpm = dpm_por_edicion.get(ins.id_programa_version_edicion, [])
 
@@ -590,11 +585,9 @@ def transcript_alumno(
             edicion_origen_anio = None
             edicion_origen_semestre = None
 
-            if nota_val is None and mod and historial:
-                nombre_lower = mod.nombre_modulo.lower()
-                if nombre_lower in origen_nota_by_name:
-                    nota_val_origen, _ = origen_nota_by_name[nombre_lower]
-                    nota_val = nota_val_origen
+            if nota_val is None and historial:
+                if dpm.id_modulo in origen_nota_by_id_modulo:
+                    nota_val = origen_nota_by_id_modulo[dpm.id_modulo]
                     es_migrada = True
                     dpa_origen = origen_dpa_map.get(historial.id_detalle_origen) if historial else None
                     pve_origen_h = pve_map.get(dpa_origen.id_programa_version_edicion) if dpa_origen else None

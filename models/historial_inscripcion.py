@@ -18,8 +18,13 @@ class HistorialInscripcion(Base):
         ForeignKey("detalle_programa_alumno.id_detalle_programa_alumno"),
         nullable=False,
     )
+    id_solicitud = Column(
+        Integer,
+        ForeignKey("solicitud_incorporacion.id_solicitud"),
+        nullable=True,
+    )
     tipo_movimiento = Column(String(20), nullable=False, default="transferencia")
-    motivo = Column(Text, nullable=False)
+    motivo = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
     origen = relationship(
@@ -31,4 +36,9 @@ class HistorialInscripcion(Base):
         "DetalleProgramaAlumno",
         foreign_keys=[id_detalle_destino],
         back_populates="transferencia_destino",
+    )
+    solicitud = relationship(
+        "SolicitudIncorporacion",
+        foreign_keys=[id_solicitud],
+        backref="historiales",
     )

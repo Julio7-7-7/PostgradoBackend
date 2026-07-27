@@ -18,7 +18,6 @@ from models.historial_inscripcion import HistorialInscripcion
 from schemas.detalle_programa_alumno import (
     DetalleProgramaAlumnoCreate, DetalleProgramaAlumnoUpdate, DetalleProgramaAlumnoResponse,
     InscripcionEdicionItem, PaginatedInscripcionesResponse, AlumnoBasico,
-    TransferirInscripcionRequest,
 )
 from schemas.admin import AutoInscribirRequest
 from schemas.auth import UserResponse
@@ -588,113 +587,6 @@ def eliminar(id: int, db: Session = Depends(get_db), current_user: UserResponse 
     ).first()
 
 
-@router.post("/{id}/transferir", response_model=DetalleProgramaAlumnoResponse, status_code=201)
-def transferir(
-    id: int,
-    data: TransferirInscripcionRequest,
-    db: Session = Depends(get_db),
-    current_user: UserResponse = Depends(require_permiso("alumnos.editar")),
-):
-    origen = db.query(DetalleProgramaAlumno).filter(
-        DetalleProgramaAlumno.id_detalle_programa_alumno == id
-    ).first()
-    if not origen:
-        raise HTTPException(status_code=404, detail="Inscripción origen no encontrada")
-
-    if origen.estado not in ("inscrito", "incorporado"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"No se puede transferir una inscripción con estado '{origen.estado}'. "
-                   f"Debe estar en 'inscrito' o 'incorporado'."
-        )
-
-    pve_destino = db.query(ProgramaVersionEdicion).filter(
-        ProgramaVersionEdicion.id_programa_version_edicion == data.id_programa_version_edicion_destino
-    ).first()
-    if not pve_destino:
-        raise HTTPException(status_code=404, detail="Edición destino no encontrada")
-
-    if pve_destino.estado not in ("programado", "en_curso"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"No se puede transferir a una edición con estado '{pve_destino.estado}'"
-        )
-
-    modalidad = db.query(ModalidadAcademica).filter(
-        ModalidadAcademica.id_modalidad_academica == data.id_modalidad_academica
-    ).first()
-    if not modalidad:
-        raise HTTPException(status_code=404, detail="Modalidad académica no encontrada")
-
-    pv_origen = db.query(ProgramaVersionEdicion).filter(
-        ProgramaVersionEdicion.id_programa_version_edicion == origen.id_programa_version_edicion
-    ).first()
-    if pv_origen and pv_origen.id_programa_version != pve_destino.id_programa_version:
-        raise HTTPException(
-            status_code=400,
-            detail="La edición destino debe pertenecer al mismo programa que la origen"
-        )
-
-    existente = db.query(DetalleProgramaAlumno).filter(
-        DetalleProgramaAlumno.id_alumno == origen.id_alumno,
-        DetalleProgramaAlumno.id_programa_version_edicion == data.id_programa_version_edicion_destino,
-    ).first()
-    if existente:
-        raise HTTPException(
-            status_code=400,
-            detail="El alumno ya tiene una inscripción en la edición destino"
-        )
-
-    _validar_cupo(data.id_programa_version_edicion_destino, db)
-
-    _validar_transicion_estado(origen.estado, "incorporado")
-    origen.estado = "incorporado"
-
-    descuento_aplicado = 0.0
-    if data.id_tipo_descuento:
-        td = _validar_descuento(data.id_tipo_descuento, data.id_modalidad_academica, origen.id_alumno, db)
-        descuento_aplicado = td.porcentaje
-
-    if data.modulo_inicio < 1:
-        raise HTTPException(
-            status_code=400,
-            detail="El módulo de inicio debe ser mayor o igual a 1"
-        )
-
-    destino = DetalleProgramaAlumno(
-        id_programa_version_edicion=data.id_programa_version_edicion_destino,
-        id_alumno=origen.id_alumno,
-        id_modalidad_academica=data.id_modalidad_academica,
-        id_tipo_descuento=data.id_tipo_descuento,
-        descuento_aplicado=descuento_aplicado,
-        modulo_inicio=data.modulo_inicio,
-        estado="incorporado",
-        fecha_inscripcion=date.today(),
-    )
-    db.add(destino)
-    db.flush()
-
-    historial = HistorialInscripcion(
-        id_detalle_origen=origen.id_detalle_programa_alumno,
-        id_detalle_destino=destino.id_detalle_programa_alumno,
-        tipo_movimiento="transferencia",
-        motivo=data.motivo,
-    )
-    db.add(historial)
-
-    generar_control_documentacion(destino.id_detalle_programa_alumno, data.id_modalidad_academica, db)
-
-    if data.id_tipo_descuento:
-        generar_control_descuento(destino.id_detalle_programa_alumno, data.id_modalidad_academica, data.id_tipo_descuento, db)
-
-    db.commit()
-    db.refresh(destino)
-    return _cargar_con_relations(
-        db.query(DetalleProgramaAlumno).filter(
-            DetalleProgramaAlumno.id_detalle_programa_alumno == destino.id_detalle_programa_alumno
-        )
-    ).first()
-
 
 @router.get("/historial-transferencias/{id_alumno}")
 def historial_transferencias(
@@ -742,6 +634,7 @@ def historial_transferencias(
         historial_data.append({
             "id_historial": h.id_historial,
             "tipo_movimiento": h.tipo_movimiento,
+            "id_solicitud": h.id_solicitud,
             "origen": ins_map.get(h.id_detalle_origen, {}),
             "destino": ins_map.get(h.id_detalle_destino, {}),
             "motivo": h.motivo,
