@@ -10,6 +10,7 @@ from models.solicitud_requisito import SolicitudRequisito
 from models.requisito import Requisito
 from models.detalle_programa_alumno import DetalleProgramaAlumno
 from models.historial_inscripcion import HistorialInscripcion
+from models.programa_version_edicion import ProgramaVersionEdicion
 from schemas.solicitud_reincorporacion import (
     SolicitudReincorporacionCreate,
     SolicitudReincorporacionResponse,
@@ -66,6 +67,18 @@ def solicitar_reincorporacion(
         raise HTTPException(
             status_code=400,
             detail="Solo podés solicitar reincorporación si estás en estado retirado"
+        )
+
+    pve = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion == dpa.id_programa_version_edicion
+    ).first()
+    if not pve:
+        raise HTTPException(status_code=404, detail="Edición no encontrada")
+
+    if pve.estado not in ("en_curso", "reprogramado"):
+        raise HTTPException(
+            status_code=400,
+            detail="La edición ya no está activa. Para volver a un programa finalizado, solicitá migración."
         )
 
     pendiente = db.query(SolicitudReincorporacion).filter(
@@ -241,6 +254,13 @@ def aprobar_solicitud_reincorporacion(
         raise HTTPException(
             status_code=400,
             detail=f"La inscripción está en estado '{dpa.estado}', se esperaba 'retirado'"
+        )
+
+    pve = dpa.programa_version_edicion
+    if not pve or pve.estado not in ("en_curso", "reprogramado"):
+        raise HTTPException(
+            status_code=400,
+            detail="La edición ya no está activa. No se puede aprobar reincorporación."
         )
 
     dpa.estado = "inscrito"

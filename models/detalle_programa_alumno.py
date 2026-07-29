@@ -28,12 +28,12 @@ class DetalleProgramaAlumno(Base):
     notas = relationship("Nota", back_populates="detalle_programa_alumno")
     solicitudes_incorporacion = relationship("SolicitudIncorporacion", back_populates="detalle_programa_alumno", cascade="all, delete-orphan")
     solicitudes_reincorporacion = relationship("SolicitudReincorporacion", back_populates="detalle_programa_alumno", cascade="all, delete-orphan")
-    transferencias_origen = relationship(
+    historial_origen = relationship(
         "HistorialInscripcion",
         foreign_keys="HistorialInscripcion.id_detalle_origen",
         back_populates="origen",
     )
-    transferencia_destino = relationship(
+    historial_destino = relationship(
         "HistorialInscripcion",
         foreign_keys="HistorialInscripcion.id_detalle_destino",
         back_populates="destino",

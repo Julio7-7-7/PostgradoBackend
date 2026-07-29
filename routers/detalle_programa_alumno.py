@@ -588,8 +588,8 @@ def eliminar(id: int, db: Session = Depends(get_db), current_user: UserResponse 
 
 
 
-@router.get("/historial-transferencias/{id_alumno}")
-def historial_transferencias(
+@router.get("/historial-movimientos/{id_alumno}")
+def historial_movimientos(
     id_alumno: int,
     db: Session = Depends(get_db),
     current_user: UserResponse = Depends(require_permiso("alumnos.ver"))
@@ -599,7 +599,7 @@ def historial_transferencias(
     ).all()
 
     dpa_ids = [i.id_detalle_programa_alumno for i in inscripciones]
-    transferencias = db.query(HistorialInscripcion).filter(
+    movimientos = db.query(HistorialInscripcion).filter(
         (HistorialInscripcion.id_detalle_origen.in_(dpa_ids)) |
         (HistorialInscripcion.id_detalle_destino.in_(dpa_ids))
     ).all() if dpa_ids else []
@@ -630,7 +630,7 @@ def historial_transferencias(
         }
 
     historial_data = []
-    for h in transferencias:
+    for h in movimientos:
         historial_data.append({
             "id_historial": h.id_historial,
             "tipo_movimiento": h.tipo_movimiento,
@@ -646,5 +646,5 @@ def historial_transferencias(
     return {
         "id_alumno": id_alumno,
         "inscripciones": list(ins_map.values()),
-        "transferencias": historial_data,
+        "movimientos": historial_data,
     }
