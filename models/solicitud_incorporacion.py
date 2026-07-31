@@ -1,49 +1,22 @@
-from sqlalchemy import Column, Integer, String, Text, Date, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, ForeignKey
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 from database import Base
 
 
 class SolicitudIncorporacion(Base):
     __tablename__ = "solicitud_incorporacion"
 
-    id_solicitud = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    id_detalle_programa_alumno = Column(
-        Integer,
-        ForeignKey("detalle_programa_alumno.id_detalle_programa_alumno"),
-        nullable=True,
-    )
+    id_solicitud = Column(Integer, ForeignKey("solicitud.id_solicitud"), primary_key=True)
     id_programa_version_edicion = Column(
-        Integer,
-        ForeignKey("programa_version_edicion.id_programa_version_edicion"),
-        nullable=True,
+        Integer, ForeignKey("programa_version_edicion.id_programa_version_edicion"), nullable=False
     )
-    estado = Column(String(20), nullable=False, default="pendiente")
-    observaciones = Column(Text, nullable=True)
-    fecha_revision = Column(Date, nullable=True)
-    created_at = Column(DateTime, server_default=func.now(), nullable=False)
-    updated_at = Column(
-        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    id_modalidad_academica = Column(
+        Integer, ForeignKey("modalidades_academicas.id_modalidad_academica"), nullable=False
+    )
+    id_tipo_descuento = Column(
+        Integer, ForeignKey("tipos_descuento.id_tipo_descuento"), nullable=True
     )
 
-    detalle_programa_alumno = relationship(
-        "DetalleProgramaAlumno", back_populates="solicitudes_incorporacion"
-    )
-    programa_version_edicion = relationship(
-        "ProgramaVersionEdicion", back_populates="solicitudes_incorporacion"
-    )
-    documentos = relationship("SolicitudDocumento", back_populates="solicitud")
-
-
-class SolicitudDocumento(Base):
-    __tablename__ = "solicitud_documento"
-
-    id_solicitud_documento = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    id_solicitud = Column(Integer, ForeignKey("solicitud_incorporacion.id_solicitud"), nullable=False)
-    id_requisito = Column(Integer, ForeignKey("requisitos.id_requisito"), nullable=False)
-    url_documento = Column(String(500), nullable=False)
-    estado = Column(String(20), nullable=False, default="pendiente")
-    fecha_entrega = Column(DateTime, server_default=func.now(), nullable=False)
-
-    solicitud = relationship("SolicitudIncorporacion", back_populates="documentos")
-    requisito = relationship("Requisito")
+    solicitud = relationship("Solicitud", back_populates="incorporacion")
+    programa_version_edicion = relationship("ProgramaVersionEdicion")
+    modalidad_academica = relationship("ModalidadAcademica")

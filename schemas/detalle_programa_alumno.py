@@ -23,6 +23,7 @@ class DetalleProgramaAlumnoBase(BaseModel):
     id_modalidad_academica: int
     id_tipo_descuento: int | None = None
     descuento_aplicado: Decimal = Decimal("0.00")
+    id_modulo_inicio: int | None = None
     modulo_inicio: int = 1
     estado: EstadoDetalleAlumnoEnum = EstadoDetalleAlumnoEnum.postulante
     es_incorporacion: bool = False
@@ -40,6 +41,7 @@ class DetalleProgramaAlumnoCreate(DetalleProgramaAlumnoBase):
 
 class DetalleProgramaAlumnoUpdate(BaseModel):
     id_tipo_descuento: int | None = None
+    id_modulo_inicio: int | None = None
     modulo_inicio: int | None = None
     estado: EstadoDetalleAlumnoEnum | None = None
     fecha_inscripcion: date | None = None
@@ -72,6 +74,7 @@ class InscripcionEdicionItem(BaseModel):
     modalidad: str
     descuento_aplicado: float
     tipo_descuento: str | None = None
+    id_modulo_inicio: int | None = None
     modulo_inicio: int
     es_incorporacion: bool = False
     fecha_inscripcion: str | None = None

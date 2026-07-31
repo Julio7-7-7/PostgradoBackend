@@ -22,8 +22,7 @@ from routers import usuarios
 from routers import pago
 from routers import nota
 from routers import dashboard
-from routers import solicitud_incorporacion
-from routers import solicitud_reincorporacion
+from routers import solicitud
 from routers import solicitud_requisito
 
 all_routers = [
@@ -51,7 +50,6 @@ all_routers = [
     pago.router,
     nota.router,
     dashboard.router,
-    solicitud_incorporacion.router,
-    solicitud_reincorporacion.router,
+    solicitud.router,
     solicitud_requisito.router,
 ]

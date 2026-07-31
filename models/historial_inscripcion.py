@@ -20,8 +20,8 @@ class HistorialInscripcion(Base):
     )
     id_solicitud = Column(
         Integer,
-        ForeignKey("solicitud_incorporacion.id_solicitud"),
-        nullable=True,
+        ForeignKey("solicitud.id_solicitud"),
+        nullable=False,
     )
     tipo_movimiento = Column(String(20), nullable=False)
     motivo = Column(Text, nullable=True)
@@ -38,7 +38,7 @@ class HistorialInscripcion(Base):
         back_populates="historial_destino",
     )
     solicitud = relationship(
-        "SolicitudIncorporacion",
+        "Solicitud",
         foreign_keys=[id_solicitud],
         backref="historiales",
     )

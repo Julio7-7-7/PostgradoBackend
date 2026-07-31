@@ -12,6 +12,11 @@ class DetalleProgramaAlumno(Base):
     id_modalidad_academica = Column(Integer, ForeignKey("modalidades_academicas.id_modalidad_academica"), nullable=False)
     id_tipo_descuento = Column(Integer, ForeignKey("tipos_descuento.id_tipo_descuento"), nullable=True)
     descuento_aplicado = Column(Numeric(5, 2), nullable=False, default=0.0)
+    id_modulo_inicio = Column(
+        Integer,
+        ForeignKey("detalle_programa_modulo.id_detalle_programa_modulo"),
+        nullable=True,
+    )
     modulo_inicio = Column(Integer, nullable=False, default=1)
     estado = Column(String(20), nullable=False, default="postulante")
     es_incorporacion = Column(Boolean, nullable=False, default=False)
@@ -23,11 +28,14 @@ class DetalleProgramaAlumno(Base):
     modalidad_academica = relationship("ModalidadAcademica", back_populates="detalles_alumno")
     tipo_descuento = relationship("TipoDescuento", back_populates="detalles_alumno")
     programa_version_edicion = relationship("ProgramaVersionEdicion", back_populates="detalles_alumno")
+    modulo_inicio_rel = relationship(
+        "DetalleProgramaModulo",
+        foreign_keys=[id_modulo_inicio],
+        backref="dpas_modulo_inicio",
+    )
     control_documentacion = relationship("ControlDocumentacion", back_populates="detalle_programa_alumno", cascade="all, delete-orphan")
     pagos = relationship("Pago", back_populates="detalle_programa_alumno")
     notas = relationship("Nota", back_populates="detalle_programa_alumno")
-    solicitudes_incorporacion = relationship("SolicitudIncorporacion", back_populates="detalle_programa_alumno", cascade="all, delete-orphan")
-    solicitudes_reincorporacion = relationship("SolicitudReincorporacion", back_populates="detalle_programa_alumno", cascade="all, delete-orphan")
     historial_origen = relationship(
         "HistorialInscripcion",
         foreign_keys="HistorialInscripcion.id_detalle_origen",

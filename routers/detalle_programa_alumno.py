@@ -21,6 +21,7 @@ from schemas.detalle_programa_alumno import (
 )
 from schemas.admin import AutoInscribirRequest
 from schemas.auth import UserResponse
+from routers.utils import resolver_modulo_inicio
 
 router = APIRouter(
     prefix="/detalle-programa-alumno",
@@ -359,7 +360,13 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
         td = _validar_descuento(data.id_tipo_descuento, data.id_modalidad_academica, current_user.id_profile, db)
         descuento_aplicado = td.porcentaje
 
-    modulo_inicio = data.modulo_inicio if data.modulo_inicio >= 1 else 1
+    modulo_inicio_val = data.modulo_inicio if data.modulo_inicio >= 1 else 1
+    id_mod, mod_orden = resolver_modulo_inicio(
+        data.id_programa_version_edicion, data.id_modulo_inicio, db
+    )
+    if not id_mod:
+        id_mod = None
+        mod_orden = modulo_inicio_val
 
     nuevo = DetalleProgramaAlumno(
         id_programa_version_edicion=data.id_programa_version_edicion,
@@ -367,7 +374,8 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
         id_modalidad_academica=data.id_modalidad_academica,
         id_tipo_descuento=data.id_tipo_descuento,
         descuento_aplicado=descuento_aplicado,
-        modulo_inicio=modulo_inicio,
+        id_modulo_inicio=id_mod,
+        modulo_inicio=mod_orden,
         estado="postulante",
         es_incorporacion=es_incorporacion,
         fecha_inscripcion=date.today(),
@@ -479,6 +487,7 @@ def inscripciones_por_edicion(
             modalidad=modalidad.nombre_modalidad if modalidad else "N/A",
             descuento_aplicado=float(reg.descuento_aplicado) if reg.descuento_aplicado else 0,
             tipo_descuento=tipo_desc.nombre if tipo_desc else None,
+            id_modulo_inicio=reg.id_modulo_inicio,
             modulo_inicio=reg.modulo_inicio,
             es_incorporacion=reg.es_incorporacion,
             fecha_inscripcion=str(reg.fecha_inscripcion) if reg.fecha_inscripcion else None,
@@ -518,7 +527,16 @@ def editar(id: int, data: DetalleProgramaAlumnoUpdate, db: Session = Depends(get
     update_data = data.model_dump(exclude_unset=True)
     update_data.pop("descuento_aplicado", None)
 
-    if "modulo_inicio" in update_data and update_data["modulo_inicio"] is not None:
+    if "id_modulo_inicio" in update_data and update_data["id_modulo_inicio"] is not None:
+        id_mod, mod_orden = resolver_modulo_inicio(
+            detalle.id_programa_version_edicion, update_data["id_modulo_inicio"], db
+        )
+        if id_mod:
+            detalle.id_modulo_inicio = id_mod
+            detalle.modulo_inicio = mod_orden
+        update_data.pop("id_modulo_inicio", None)
+        update_data.pop("modulo_inicio", None)
+    elif "modulo_inicio" in update_data and update_data["modulo_inicio"] is not None:
         if update_data["modulo_inicio"] < 1:
             raise HTTPException(status_code=400, detail="El módulo de inicio debe ser >= 1")
 

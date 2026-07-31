@@ -116,6 +116,30 @@ def eliminar_foto(ruta: str | None):
             archivo.unlink()
 
 
+from models.detalle_programa_modulo import DetalleProgramaModulo
+
+
+def resolver_modulo_inicio(id_pve: int, id_modulo_inicio: int | None, db: Session) -> tuple[int | None, int]:
+    if id_modulo_inicio:
+        dpm = db.query(DetalleProgramaModulo).filter(
+            DetalleProgramaModulo.id_detalle_programa_modulo == id_modulo_inicio,
+            DetalleProgramaModulo.id_programa_version_edicion == id_pve,
+        ).first()
+        if not dpm:
+            raise HTTPException(
+                status_code=400,
+                detail="El módulo de inicio no pertenece a la edición especificada"
+            )
+        return (dpm.id_detalle_programa_modulo, dpm.orden)
+
+    dpm = db.query(DetalleProgramaModulo).filter(
+        DetalleProgramaModulo.id_programa_version_edicion == id_pve,
+    ).order_by(DetalleProgramaModulo.orden).first()
+    if dpm:
+        return (dpm.id_detalle_programa_modulo, dpm.orden)
+    return (None, 1)
+
+
 def es_alumno_actual(usuario, id_alumno: int, db: Session) -> bool:
     from models.alumno import Alumno
     if usuario.profile_type == "alumno" and usuario.id_profile == id_alumno:
