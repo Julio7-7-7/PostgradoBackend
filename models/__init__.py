@@ -28,4 +28,9 @@ from models.modalidad_tipo_programa import ModalidadTipoPrograma
 from models.pago import Pago
 from models.nota import Nota
 from models.historial_inscripcion import HistorialInscripcion
+from models.tipo_solicitud import TipoSolicitud
+from models.solicitud import Solicitud
+from models.documento_solicitud import DocumentoSolicitud
+from models.solicitud_requisito import SolicitudRequisito
 from models.solicitud_incorporacion import SolicitudIncorporacion
+from models.solicitud_migracion import SolicitudMigracion

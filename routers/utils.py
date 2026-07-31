@@ -116,6 +116,30 @@ def eliminar_foto(ruta: str | None):
             archivo.unlink()
 
 
+from models.detalle_programa_modulo import DetalleProgramaModulo
+
+
+def resolver_modulo_inicio(id_pve: int, id_modulo_inicio: int | None, db: Session) -> tuple[int | None, int]:
+    if id_modulo_inicio:
+        dpm = db.query(DetalleProgramaModulo).filter(
+            DetalleProgramaModulo.id_detalle_programa_modulo == id_modulo_inicio,
+            DetalleProgramaModulo.id_programa_version_edicion == id_pve,
+        ).first()
+        if not dpm:
+            raise HTTPException(
+                status_code=400,
+                detail="El módulo de inicio no pertenece a la edición especificada"
+            )
+        return (dpm.id_detalle_programa_modulo, dpm.orden)
+
+    dpm = db.query(DetalleProgramaModulo).filter(
+        DetalleProgramaModulo.id_programa_version_edicion == id_pve,
+    ).order_by(DetalleProgramaModulo.orden).first()
+    if dpm:
+        return (dpm.id_detalle_programa_modulo, dpm.orden)
+    return (None, 1)
+
+
 def es_alumno_actual(usuario, id_alumno: int, db: Session) -> bool:
     from models.alumno import Alumno
     if usuario.profile_type == "alumno" and usuario.id_profile == id_alumno:
@@ -124,3 +148,35 @@ def es_alumno_actual(usuario, id_alumno: int, db: Session) -> bool:
     if not alumno or not alumno.id_usuario:
         return False
     return alumno.id_usuario == usuario.id_usuario
+
+
+def inferir_tipo_movimiento(dpa_origen, dpa_destino, db: Session) -> str:
+    if dpa_origen.id_detalle_programa_alumno == dpa_destino.id_detalle_programa_alumno:
+        return "reincorporacion"
+
+    from models.programa_version import ProgramaVersion
+    from models.programa_version_edicion import ProgramaVersionEdicion
+
+    pv_origen = db.query(ProgramaVersion).join(
+        ProgramaVersionEdicion,
+        ProgramaVersionEdicion.id_programa_version == ProgramaVersion.id_programa_version,
+    ).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion == dpa_origen.id_programa_version_edicion
+    ).first()
+
+    pv_destino = db.query(ProgramaVersion).join(
+        ProgramaVersionEdicion,
+        ProgramaVersionEdicion.id_programa_version == ProgramaVersion.id_programa_version,
+    ).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion == dpa_destino.id_programa_version_edicion
+    ).first()
+
+    if pv_origen and pv_destino and pv_origen.id_programa_version == pv_destino.id_programa_version:
+        return "migracion"
+
+    raise ValueError(
+        f"Tipo de movimiento no soportado: DPA origen {dpa_origen.id_detalle_programa_alumno} "
+        f"(programa_version {pv_origen.id_programa_version if pv_origen else '?'}) → "
+        f"DPA destino {dpa_destino.id_detalle_programa_alumno} "
+        f"(programa_version {pv_destino.id_programa_version if pv_destino else '?'})"
+    )

@@ -15,14 +15,13 @@ from models.control_documentacion import ControlDocumentacion
 from models.requisito import Requisito
 from models.alumno import Alumno
 from models.historial_inscripcion import HistorialInscripcion
-from models.solicitud_incorporacion import SolicitudIncorporacion
 from schemas.detalle_programa_alumno import (
     DetalleProgramaAlumnoCreate, DetalleProgramaAlumnoUpdate, DetalleProgramaAlumnoResponse,
     InscripcionEdicionItem, PaginatedInscripcionesResponse, AlumnoBasico,
-    TransferirInscripcionRequest,
 )
 from schemas.admin import AutoInscribirRequest
 from schemas.auth import UserResponse
+from routers.utils import resolver_modulo_inicio
 
 router = APIRouter(
     prefix="/detalle-programa-alumno",
@@ -113,7 +112,8 @@ def generar_control_documentacion(id_detalle: int, id_modalidad_academica: int, 
         return
     requisitos = db.query(Requisito).filter(
         Requisito.id_requisito.in_(requisito_ids),
-        Requisito.estado == "activo"
+        Requisito.estado == "activo",
+        Requisito.nombre != "Carta de Solicitud de Incorporación"
     ).all()
     for requisito in requisitos:
         control = ControlDocumentacion(
@@ -360,7 +360,13 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
         td = _validar_descuento(data.id_tipo_descuento, data.id_modalidad_academica, current_user.id_profile, db)
         descuento_aplicado = td.porcentaje
 
-    modulo_inicio = data.modulo_inicio if data.modulo_inicio >= 1 else 1
+    modulo_inicio_val = data.modulo_inicio if data.modulo_inicio >= 1 else 1
+    id_mod, mod_orden = resolver_modulo_inicio(
+        data.id_programa_version_edicion, data.id_modulo_inicio, db
+    )
+    if not id_mod:
+        id_mod = None
+        mod_orden = modulo_inicio_val
 
     nuevo = DetalleProgramaAlumno(
         id_programa_version_edicion=data.id_programa_version_edicion,
@@ -368,23 +374,14 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
         id_modalidad_academica=data.id_modalidad_academica,
         id_tipo_descuento=data.id_tipo_descuento,
         descuento_aplicado=descuento_aplicado,
-        modulo_inicio=modulo_inicio,
+        id_modulo_inicio=id_mod,
+        modulo_inicio=mod_orden,
         estado="postulante",
         es_incorporacion=es_incorporacion,
         fecha_inscripcion=date.today(),
     )
     db.add(nuevo)
     db.flush()
-
-    if es_incorporacion:
-        solicitud = SolicitudIncorporacion(
-            id_detalle_programa_alumno=nuevo.id_detalle_programa_alumno,
-            id_alumno=current_user.id_profile,
-            id_programa_version_edicion=data.id_programa_version_edicion,
-            tipo_documento="Carta de Solicitud de Incorporación",
-            estado="pendiente",
-        )
-        db.add(solicitud)
 
     generar_control_documentacion(nuevo.id_detalle_programa_alumno, data.id_modalidad_academica, db)
 
@@ -490,6 +487,7 @@ def inscripciones_por_edicion(
             modalidad=modalidad.nombre_modalidad if modalidad else "N/A",
             descuento_aplicado=float(reg.descuento_aplicado) if reg.descuento_aplicado else 0,
             tipo_descuento=tipo_desc.nombre if tipo_desc else None,
+            id_modulo_inicio=reg.id_modulo_inicio,
             modulo_inicio=reg.modulo_inicio,
             es_incorporacion=reg.es_incorporacion,
             fecha_inscripcion=str(reg.fecha_inscripcion) if reg.fecha_inscripcion else None,
@@ -529,7 +527,16 @@ def editar(id: int, data: DetalleProgramaAlumnoUpdate, db: Session = Depends(get
     update_data = data.model_dump(exclude_unset=True)
     update_data.pop("descuento_aplicado", None)
 
-    if "modulo_inicio" in update_data and update_data["modulo_inicio"] is not None:
+    if "id_modulo_inicio" in update_data and update_data["id_modulo_inicio"] is not None:
+        id_mod, mod_orden = resolver_modulo_inicio(
+            detalle.id_programa_version_edicion, update_data["id_modulo_inicio"], db
+        )
+        if id_mod:
+            detalle.id_modulo_inicio = id_mod
+            detalle.modulo_inicio = mod_orden
+        update_data.pop("id_modulo_inicio", None)
+        update_data.pop("modulo_inicio", None)
+    elif "modulo_inicio" in update_data and update_data["modulo_inicio"] is not None:
         if update_data["modulo_inicio"] < 1:
             raise HTTPException(status_code=400, detail="El módulo de inicio debe ser >= 1")
 
@@ -598,115 +605,9 @@ def eliminar(id: int, db: Session = Depends(get_db), current_user: UserResponse 
     ).first()
 
 
-@router.post("/{id}/transferir", response_model=DetalleProgramaAlumnoResponse, status_code=201)
-def transferir(
-    id: int,
-    data: TransferirInscripcionRequest,
-    db: Session = Depends(get_db),
-    current_user: UserResponse = Depends(require_permiso("alumnos.editar")),
-):
-    origen = db.query(DetalleProgramaAlumno).filter(
-        DetalleProgramaAlumno.id_detalle_programa_alumno == id
-    ).first()
-    if not origen:
-        raise HTTPException(status_code=404, detail="Inscripción origen no encontrada")
 
-    if origen.estado not in ("inscrito", "incorporado"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"No se puede transferir una inscripción con estado '{origen.estado}'. "
-                   f"Debe estar en 'inscrito' o 'incorporado'."
-        )
-
-    pve_destino = db.query(ProgramaVersionEdicion).filter(
-        ProgramaVersionEdicion.id_programa_version_edicion == data.id_programa_version_edicion_destino
-    ).first()
-    if not pve_destino:
-        raise HTTPException(status_code=404, detail="Edición destino no encontrada")
-
-    if pve_destino.estado not in ("programado", "en_curso"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"No se puede transferir a una edición con estado '{pve_destino.estado}'"
-        )
-
-    modalidad = db.query(ModalidadAcademica).filter(
-        ModalidadAcademica.id_modalidad_academica == data.id_modalidad_academica
-    ).first()
-    if not modalidad:
-        raise HTTPException(status_code=404, detail="Modalidad académica no encontrada")
-
-    pv_origen = db.query(ProgramaVersionEdicion).filter(
-        ProgramaVersionEdicion.id_programa_version_edicion == origen.id_programa_version_edicion
-    ).first()
-    if pv_origen and pv_origen.id_programa_version != pve_destino.id_programa_version:
-        raise HTTPException(
-            status_code=400,
-            detail="La edición destino debe pertenecer al mismo programa que la origen"
-        )
-
-    existente = db.query(DetalleProgramaAlumno).filter(
-        DetalleProgramaAlumno.id_alumno == origen.id_alumno,
-        DetalleProgramaAlumno.id_programa_version_edicion == data.id_programa_version_edicion_destino,
-    ).first()
-    if existente:
-        raise HTTPException(
-            status_code=400,
-            detail="El alumno ya tiene una inscripción en la edición destino"
-        )
-
-    _validar_cupo(data.id_programa_version_edicion_destino, db)
-
-    _validar_transicion_estado(origen.estado, "incorporado")
-    origen.estado = "incorporado"
-
-    descuento_aplicado = 0.0
-    if data.id_tipo_descuento:
-        td = _validar_descuento(data.id_tipo_descuento, data.id_modalidad_academica, origen.id_alumno, db)
-        descuento_aplicado = td.porcentaje
-
-    if data.modulo_inicio < 1:
-        raise HTTPException(
-            status_code=400,
-            detail="El módulo de inicio debe ser mayor o igual a 1"
-        )
-
-    destino = DetalleProgramaAlumno(
-        id_programa_version_edicion=data.id_programa_version_edicion_destino,
-        id_alumno=origen.id_alumno,
-        id_modalidad_academica=data.id_modalidad_academica,
-        id_tipo_descuento=data.id_tipo_descuento,
-        descuento_aplicado=descuento_aplicado,
-        modulo_inicio=data.modulo_inicio,
-        estado="incorporado",
-        fecha_inscripcion=date.today(),
-    )
-    db.add(destino)
-    db.flush()
-
-    historial = HistorialInscripcion(
-        id_detalle_origen=origen.id_detalle_programa_alumno,
-        id_detalle_destino=destino.id_detalle_programa_alumno,
-        motivo=data.motivo,
-    )
-    db.add(historial)
-
-    generar_control_documentacion(destino.id_detalle_programa_alumno, data.id_modalidad_academica, db)
-
-    if data.id_tipo_descuento:
-        generar_control_descuento(destino.id_detalle_programa_alumno, data.id_modalidad_academica, data.id_tipo_descuento, db)
-
-    db.commit()
-    db.refresh(destino)
-    return _cargar_con_relations(
-        db.query(DetalleProgramaAlumno).filter(
-            DetalleProgramaAlumno.id_detalle_programa_alumno == destino.id_detalle_programa_alumno
-        )
-    ).first()
-
-
-@router.get("/historial-transferencias/{id_alumno}")
-def historial_transferencias(
+@router.get("/historial-movimientos/{id_alumno}")
+def historial_movimientos(
     id_alumno: int,
     db: Session = Depends(get_db),
     current_user: UserResponse = Depends(require_permiso("alumnos.ver"))
@@ -716,7 +617,7 @@ def historial_transferencias(
     ).all()
 
     dpa_ids = [i.id_detalle_programa_alumno for i in inscripciones]
-    transferencias = db.query(HistorialInscripcion).filter(
+    movimientos = db.query(HistorialInscripcion).filter(
         (HistorialInscripcion.id_detalle_origen.in_(dpa_ids)) |
         (HistorialInscripcion.id_detalle_destino.in_(dpa_ids))
     ).all() if dpa_ids else []
@@ -747,9 +648,11 @@ def historial_transferencias(
         }
 
     historial_data = []
-    for h in transferencias:
+    for h in movimientos:
         historial_data.append({
             "id_historial": h.id_historial,
+            "tipo_movimiento": h.tipo_movimiento,
+            "id_solicitud": h.id_solicitud,
             "origen": ins_map.get(h.id_detalle_origen, {}),
             "destino": ins_map.get(h.id_detalle_destino, {}),
             "motivo": h.motivo,
@@ -761,5 +664,5 @@ def historial_transferencias(
     return {
         "id_alumno": id_alumno,
         "inscripciones": list(ins_map.values()),
-        "transferencias": historial_data,
+        "movimientos": historial_data,
     }
