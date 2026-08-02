@@ -19,7 +19,7 @@ router = APIRouter(
 def listar_requisitos(
     id_tipo_solicitud: int = Query(...),
     db: Session = Depends(get_db),
-    current_user: UserResponse = Depends(require_permiso("alumnos.editar")),
+    current_user: UserResponse = Depends(get_current_user),
 ):
     items = db.query(SolicitudRequisito).filter(
         SolicitudRequisito.estado == "activo",
@@ -43,7 +43,6 @@ def listar_requisitos(
             id_solicitud_requisito=i.id_solicitud_requisito,
             id_requisito=i.id_requisito,
             id_tipo_solicitud=i.id_tipo_solicitud,
-            obligatorio=i.obligatorio,
             estado=i.estado,
             tipo_codigo=tipo_map.get(i.id_tipo_solicitud),
             requisito_nombre=requisitos_map.get(i.id_requisito),

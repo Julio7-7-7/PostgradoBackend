@@ -11,6 +11,7 @@ from models.tipo_descuento import TipoDescuento
 from models.modalidad_tipo_descuento import ModalidadTipoDescuento
 from models.modalidad_tipo_programa import ModalidadTipoPrograma
 from models.programa_version_edicion import ProgramaVersionEdicion
+from models.programa_version import ProgramaVersion
 from models.control_documentacion import ControlDocumentacion
 from models.requisito import Requisito
 from models.alumno import Alumno
@@ -406,7 +407,7 @@ def listar(db: Session = Depends(get_db), current_user: UserResponse = Depends(r
 def inscripciones_por_edicion(
     id_edicion: int,
     page: int = Query(1, ge=1),
-    per_page: int = Query(20, ge=1, le=100),
+    per_page: int = Query(20, ge=1, le=500),
     estado: str | None = None,
     search: str | None = None,
     db: Session = Depends(get_db),

@@ -87,35 +87,24 @@ def _crear_documentos(solicitud_id, id_tipo_solicitud, carta_url, db):
         db.add(doc)
 
 
-def _sincronizar_documentos(solicitud, db, id_tipo_solicitud):
-    configs = db.query(SolicitudRequisito).filter(
-        SolicitudRequisito.estado == "activo",
-        SolicitudRequisito.id_tipo_solicitud == id_tipo_solicitud,
-    ).all()
-    existing_ids = {d.id_requisito for d in solicitud.documentos}
-
-    added = False
-    for cfg in configs:
-        if cfg.id_requisito not in existing_ids:
-            db.add(DocumentoSolicitud(
-                id_solicitud=solicitud.id_solicitud,
-                id_requisito=cfg.id_requisito,
-                url_documento="",
-                estado="pendiente",
-            ))
-            added = True
-    if added:
-        db.commit()
-        db.expire(solicitud)
-
-
 def _determinar_tipo(alumno_id, id_pve_edicion, db):
     if not id_pve_edicion:
         dpa_origen = db.query(DetalleProgramaAlumno).filter(
             DetalleProgramaAlumno.id_alumno == alumno_id,
             DetalleProgramaAlumno.estado.in_(["finalizado", "incorporado", "inscrito"]),
         ).order_by(DetalleProgramaAlumno.id_detalle_programa_alumno.desc()).first()
-        return ("migracion", dpa_origen.id_detalle_programa_alumno if dpa_origen else None)
+        if dpa_origen:
+            return ("migracion", dpa_origen.id_detalle_programa_alumno)
+        dpa_retirado = db.query(DetalleProgramaAlumno).join(
+            ProgramaVersionEdicion,
+        ).filter(
+            DetalleProgramaAlumno.id_alumno == alumno_id,
+            DetalleProgramaAlumno.estado == "retirado",
+            ProgramaVersionEdicion.estado == "finalizado",
+        ).order_by(DetalleProgramaAlumno.id_detalle_programa_alumno.desc()).first()
+        if dpa_retirado:
+            return ("migracion", dpa_retirado.id_detalle_programa_alumno)
+        return ("migracion", None)
 
     pve = db.query(ProgramaVersionEdicion).get(id_pve_edicion)
     if not pve:
@@ -166,17 +155,20 @@ def _load_con_detalle(solicitudes, db):
             dpa_ids.add(s.id_detalle_origen)
         alumno_ids.add(s.id_alumno)
 
+    dpas = db.query(DetalleProgramaAlumno).filter(
+        DetalleProgramaAlumno.id_detalle_programa_alumno.in_(dpa_ids)
+    ).all() if dpa_ids else []
+    dpa_map = {d.id_detalle_programa_alumno: d for d in dpas}
+
+    for d in dpas:
+        pve_ids.add(d.id_programa_version_edicion)
+
     pves = db.query(ProgramaVersionEdicion).options(
         joinedload(ProgramaVersionEdicion.programa_version).joinedload(ProgramaVersion.programa)
     ).filter(
         ProgramaVersionEdicion.id_programa_version_edicion.in_(pve_ids)
     ).all() if pve_ids else []
     pve_map = {p.id_programa_version_edicion: p for p in pves}
-
-    dpas = db.query(DetalleProgramaAlumno).filter(
-        DetalleProgramaAlumno.id_detalle_programa_alumno.in_(dpa_ids)
-    ).all() if dpa_ids else []
-    dpa_map = {d.id_detalle_programa_alumno: d for d in dpas}
 
     alumnos_map = {
         a.id_alumno: a
@@ -188,12 +180,11 @@ def _load_con_detalle(solicitudes, db):
         dpa = dpa_map.get(s.id_detalle_origen) if s.id_detalle_origen else None
         alumno = alumnos_map.get(s.id_alumno)
         pve_id = _pve_from_solicitud(s)
+        if not pve_id and dpa:
+            pve_id = dpa.id_programa_version_edicion
         pve = pve_map.get(pve_id) if pve_id else None
         pv = pve.programa_version if pve else None
         prog = pv.programa if pv else None
-
-        if s.estado == "pendiente":
-            _sincronizar_documentos(s, db, s.id_tipo_solicitud)
 
         items.append(SolicitudConDetalle(
             id_solicitud=s.id_solicitud,
@@ -408,7 +399,7 @@ def puede_migrar(
     if dpa.estado in ("postulante", "observado"):
         return {"puede": False, "motivo": "Tu inscripción aún no está activa"}
 
-    if dpa.estado == "retirado":
+    if dpa.estado == "retirado" and pve.estado == "reprogramado":
         return {"puede": False, "motivo": "Estás retirado. Solicitá reincorporación en su lugar."}
 
     pv = pve.programa_version
@@ -491,9 +482,6 @@ def mis_solicitudes(
 
     result = []
     for s in solicitudes:
-        if s.estado == "pendiente":
-            _sincronizar_documentos(s, db, s.id_tipo_solicitud)
-
         result.append(SolicitudResponse(
             id_solicitud=s.id_solicitud,
             id_tipo_solicitud=s.id_tipo_solicitud,
@@ -748,12 +736,13 @@ def aprobar(
                 detail="La edición ya no está activa. No se puede aprobar reincorporación."
             )
 
-        id_mod, mod_orden = resolver_modulo_inicio(
-            dpa.id_programa_version_edicion, data.id_modulo_inicio, db
-        )
+        if data.id_modulo_inicio:
+            id_mod, mod_orden = resolver_modulo_inicio(
+                dpa.id_programa_version_edicion, data.id_modulo_inicio, db
+            )
+            dpa.id_modulo_inicio = id_mod
+            dpa.modulo_inicio = mod_orden
 
-        dpa.id_modulo_inicio = id_mod
-        dpa.modulo_inicio = mod_orden
         dpa.estado = "inscrito"
 
         historial = HistorialInscripcion(
