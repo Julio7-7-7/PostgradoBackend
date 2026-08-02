@@ -4,7 +4,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
 
-load_dotenv()
+ENV = os.getenv("APP_ENV", "local")
+load_dotenv(".env.prod" if ENV == "production" else ".env")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://julius:adminjt@localhost/postgrado")
 
 engine = create_engine(DATABASE_URL)
