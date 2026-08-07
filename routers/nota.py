@@ -29,12 +29,37 @@ router = APIRouter(
 )
 
 
+def _es_docente(user: UserResponse) -> bool:
+    return user.profile_type == "docente"
+
+
+def _tiene_contratacion(db: Session, id_dpm: int, id_docente: int) -> bool:
+    return db.query(ContratacionDocente).filter(
+        ContratacionDocente.id_detalle_modulo == id_dpm,
+        ContratacionDocente.id_docente == id_docente,
+        ContratacionDocente.estado != "truncado",
+    ).first() is not None
+
+
+def _es_modulo_en_curso(db: Session, id_dpm: int) -> bool:
+    dm = db.query(DetalleProgramaModulo).filter(
+        DetalleProgramaModulo.id_detalle_programa_modulo == id_dpm
+    ).first()
+    return dm is not None and dm.estado == "en_curso"
+
+
 @router.get("/por-edicion/{id_edicion}", response_model=list[NotaEdicionResponse])
 def notas_por_edicion(
     id_edicion: int,
     db: Session = Depends(get_db),
     current_user: UserResponse = Depends(require_permiso("notas.ver"))
 ):
+    if _es_docente(current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="El docente solo puede consultar notas de sus módulos asignados",
+        )
+
     estados_permitidos = ESTADOS_CON_CALIFICACION | {"retirado"}
     detalles_alumno = db.query(DetalleProgramaAlumno).filter(
         DetalleProgramaAlumno.id_programa_version_edicion == id_edicion,
@@ -115,6 +140,9 @@ def notas_por_edicion(
 
 @router.post("/", response_model=NotaResponse, status_code=201)
 def crear_nota(data: NotaCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("notas.subir"))):
+    if not _es_docente(current_user) or not current_user.id_profile:
+        raise HTTPException(status_code=403, detail="Solo el docente responsable puede cargar notas")
+
     detalle = db.query(DetalleProgramaAlumno).filter(
         DetalleProgramaAlumno.id_detalle_programa_alumno == data.id_detalle_programa_alumno
     ).first()
@@ -135,6 +163,18 @@ def crear_nota(data: NotaCreate, db: Session = Depends(get_db), current_user: Us
     ).first()
     if not dm:
         raise HTTPException(status_code=404, detail="Módulo no encontrado")
+
+    if not _tiene_contratacion(db, dm.id_detalle_programa_modulo, current_user.id_profile):
+        raise HTTPException(
+            status_code=403,
+            detail="El módulo no está asignado a este docente",
+        )
+
+    if dm.estado != "en_curso":
+        raise HTTPException(
+            status_code=400,
+            detail="Solo se pueden registrar notas de un módulo en curso",
+        )
 
     if dm.id_programa_version_edicion != detalle.id_programa_version_edicion:
         raise HTTPException(
@@ -169,9 +209,24 @@ def editar_nota(
     db: Session = Depends(get_db),
     current_user: UserResponse = Depends(require_permiso("notas.subir"))
 ):
+    if not _es_docente(current_user) or not current_user.id_profile:
+        raise HTTPException(status_code=403, detail="Solo el docente responsable puede editar notas")
+
     nota = db.query(Nota).filter(Nota.id_nota == id).first()
     if not nota:
         raise HTTPException(status_code=404, detail="Nota no encontrada")
+
+    if not _tiene_contratacion(db, nota.id_detalle_programa_modulo, current_user.id_profile):
+        raise HTTPException(
+            status_code=403,
+            detail="El módulo no está asignado a este docente",
+        )
+
+    if not _es_modulo_en_curso(db, nota.id_detalle_programa_modulo):
+        raise HTTPException(
+            status_code=400,
+            detail="Solo se pueden editar notas de un módulo en curso",
+        )
 
     if data.nota is not None and (float(data.nota) < 0 or float(data.nota) > 100):
         raise HTTPException(status_code=400, detail="La nota debe estar entre 0 y 100")
@@ -196,6 +251,9 @@ def notas_por_docente(
     db: Session = Depends(get_db),
     current_user: UserResponse = Depends(require_permiso("notas.ver"))
 ):
+    if _es_docente(current_user) and current_user.id_profile:
+        id_docente = current_user.id_profile
+
     modulos_asignados = db.query(ContratacionDocente).filter(
         ContratacionDocente.id_docente == id_docente,
         ContratacionDocente.estado != "truncado",
@@ -309,6 +367,13 @@ def notas_por_modulo(
     db: Session = Depends(get_db),
     current_user: UserResponse = Depends(require_permiso("notas.ver"))
 ):
+    if _es_docente(current_user):
+        if not current_user.id_profile or not _tiene_contratacion(db, id_dpm, current_user.id_profile):
+            raise HTTPException(
+                status_code=403,
+                detail="El módulo no está asignado a este docente",
+            )
+
     dm = db.query(DetalleProgramaModulo).options(
         joinedload(DetalleProgramaModulo.modulo),
         joinedload(DetalleProgramaModulo.programa_version_edicion)
