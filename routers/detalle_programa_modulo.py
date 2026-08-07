@@ -162,10 +162,18 @@ def reordenar(data: ReordenarRequest, db: Session = Depends(get_db), current_use
     if ids_recibidos != ids_reales:
         raise HTTPException(status_code=400, detail="Los módulos enviados no coinciden con los de la edición")
 
-    for d in existentes:
-        actualizar_estado_auto(d, db)
-        if d.estado == "finalizado":
-            raise HTTPException(status_code=400, detail="No se puede reordenar: hay módulos finalizados en la edición")
+    dpm_map = {d.id_detalle_programa_modulo: d for d in existentes}
+
+    for item in data.ordenes:
+        d = dpm_map.get(item.id_detalle)
+        if not d:
+            continue
+        if d.estado in ("en_curso", "finalizado") and item.orden != d.orden:
+            etiqueta = "en curso" if d.estado == "en_curso" else "finalizado"
+            raise HTTPException(
+                status_code=400,
+                detail=f"No se puede reordenar: no se puede mover un módulo {etiqueta}",
+            )
 
     for item in data.ordenes:
         db.query(DetalleProgramaModulo).filter(

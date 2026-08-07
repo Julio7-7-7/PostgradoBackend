@@ -515,6 +515,8 @@ def transcript_alumno(
     for dpm in todos_dpm:
         dpm_por_edicion.setdefault(dpm.id_programa_version_edicion, []).append(dpm)
 
+    dpm_by_id = {dpm.id_detalle_programa_modulo: dpm for dpm in todos_dpm}
+
     all_modulo_ids = {dpm.id_modulo for dpm in todos_dpm}
     modulos = db.query(Modulo).filter(
         Modulo.id_modulo.in_(all_modulo_ids)
@@ -619,6 +621,12 @@ def transcript_alumno(
         promedio_ins = redondear_nota(sum(notas_finales) / len(notas_finales)) if notas_finales else None
         todas_notas.extend(notas_finales)
 
+        mod_inicio_efectivo = ins.modulo_inicio or 1
+        if ins.id_modulo_inicio:
+            dpm_inicio = dpm_by_id.get(ins.id_modulo_inicio)
+            if dpm_inicio:
+                mod_inicio_efectivo = dpm_inicio.orden
+
         inscripcion_items.append(InscripcionTranscriptItem(
             id_detalle_programa_alumno=ins.id_detalle_programa_alumno,
             estado=ins.estado,
@@ -628,7 +636,7 @@ def transcript_alumno(
             edicion_semestre=pve.semestre if pve else None,
             programa_nombre=prog.nombre_programa if prog else "N/A",
             modalidad_nombre=modalidad.nombre_modalidad if modalidad else "N/A",
-            modulo_inicio=ins.modulo_inicio or 1,
+            modulo_inicio=mod_inicio_efectivo,
             modulos=modulos_items,
             promedio=promedio_ins,
             migrado_a_edicion_numero=migrado_a_edicion_numero,
