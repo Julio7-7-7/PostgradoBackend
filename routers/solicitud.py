@@ -27,6 +27,10 @@ from schemas.solicitud import (
     SolicitudIncorporacionResponse,
     SolicitudMigracionResponse,
     DocumentoSolicitudResponse,
+    ModuloPendiente,
+    ModuloCoincidencia,
+    DestinoRecomendado,
+    DestinosRecomendadosResponse,
 )
 from schemas.auth import UserResponse
 from routers.utils import guardar_documento_base64, eliminar_foto, inferir_tipo_movimiento, resolver_modulo_inicio
@@ -205,6 +209,8 @@ def _load_con_detalle(solicitudes, db):
             edicion_semestre=pve.semestre if pve else None,
             programa_nombre=prog.nombre_programa if prog else None,
             dpa_estado=dpa.estado if dpa else None,
+            dpa_modulo_inicio=dpa.modulo_inicio if dpa else None,
+            dpa_id_modulo_inicio=dpa.id_modulo_inicio if dpa else None,
             created_at=s.created_at,
             documentos=_build_docs_response(s.documentos, db),
             incorporacion=SolicitudIncorporacionResponse.model_validate(s.incorporacion) if s.incorporacion else None,
@@ -1054,3 +1060,211 @@ def preview_migracion(
             "monto_a_migrar": sum(float(p.monto) for p in pagos_origen if p.estado == "aprobado"),
         },
     }
+
+
+def _motivo_destino(afinidad: int, aprovechables: int, total: int, coincidencias: list[ModuloCoincidencia]) -> str:
+    if total == 0:
+        return "El alumno no tiene módulos pendientes en la edición origen."
+    base = f"Cubre {aprovechables} de {total} módulo(s) pendiente(s) ({afinidad}% de afinidad)."
+    no_disp = [c.nombre_modulo for c in coincidencias if not c.disponible]
+    if no_disp:
+        base += " No aprovechables: " + "; ".join(no_disp) + "."
+    return base
+
+
+def _motivo_recomendado(destinos: list[DestinoRecomendado]) -> str:
+    mejor = destinos[0]
+    empatados = [
+        d for d in destinos
+        if d.aprovechables == mejor.aprovechables and d.afinidad_pct == mejor.afinidad_pct
+    ]
+    motivo = mejor.motivo_recomendacion
+    if len(empatados) > 1:
+        if mejor.cupo_disponible is not None and any(
+            e.cupo_disponible is not None and e.cupo_disponible < mejor.cupo_disponible for e in empatados
+        ):
+            motivo += " Mejor cupo disponible entre las de igual afinidad."
+        elif mejor.fecha_inicio is not None:
+            motivo += " Mayor proximidad de inicio entre las de igual afinidad."
+        else:
+            motivo += " Mejor disponibilidad general."
+    return motivo
+
+
+@router.get("/{id_solicitud}/destinos-recomendados", response_model=DestinosRecomendadosResponse)
+def destinos_recomendados(
+    id_solicitud: int,
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(require_permiso("alumnos.editar")),
+):
+    from models.nota import Nota
+    from models.modulo import Modulo
+    from schemas.enums import clasificar_nota
+
+    solicitud = db.query(Solicitud).options(
+        joinedload(Solicitud.incorporacion),
+        joinedload(Solicitud.migracion),
+    ).filter(
+        Solicitud.id_solicitud == id_solicitud
+    ).first()
+    if not solicitud:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+
+    if solicitud.estado != "pendiente":
+        raise HTTPException(status_code=400, detail="Solo se pueden evaluar solicitudes pendientes")
+
+    tipo = db.query(TipoSolicitud).filter(
+        TipoSolicitud.id_tipo_solicitud == solicitud.id_tipo_solicitud
+    ).first()
+    if not tipo or tipo.codigo != "migracion":
+        raise HTTPException(status_code=400, detail="Solo aplica a solicitudes de migración")
+
+    if not solicitud.id_detalle_origen:
+        raise HTTPException(status_code=400, detail="No se encontró la inscripción origen del alumno")
+
+    dpa_origen = db.query(DetalleProgramaAlumno).filter(
+        DetalleProgramaAlumno.id_detalle_programa_alumno == solicitud.id_detalle_origen
+    ).first()
+    if not dpa_origen:
+        raise HTTPException(status_code=400, detail="No se encontró la inscripción origen del alumno")
+
+    alumno = db.query(Alumno).filter(Alumno.id_alumno == dpa_origen.id_alumno).first()
+
+    pve_origen = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion == dpa_origen.id_programa_version_edicion
+    ).first()
+    if not pve_origen or not pve_origen.id_programa_version:
+        raise HTTPException(status_code=400, detail="No se encontró la edición origen del alumno")
+
+    dpms_origen = db.query(DetalleProgramaModulo).filter(
+        DetalleProgramaModulo.id_programa_version_edicion == pve_origen.id_programa_version_edicion
+    ).order_by(DetalleProgramaModulo.orden).all()
+    if not dpms_origen:
+        raise HTTPException(status_code=400, detail="La edición origen no tiene módulos cargados")
+
+    modulo_ids = {d.id_modulo for d in dpms_origen}
+    modulos_map = {
+        m.id_modulo: m
+        for m in db.query(Modulo).filter(Modulo.id_modulo.in_(modulo_ids)).all()
+    }
+
+    notas_origen = db.query(Nota).filter(
+        Nota.id_detalle_programa_alumno == dpa_origen.id_detalle_programa_alumno
+    ).all()
+    nota_by_dpm = {}
+    for n in notas_origen:
+        prev = nota_by_dpm.get(n.id_detalle_programa_modulo)
+        if not prev or n.id_nota > prev.id_nota:
+            nota_by_dpm[n.id_detalle_programa_modulo] = n
+
+    APROBADAS = {"suficiente", "bueno", "distinguido", "sobresaliente"}
+    aprobadas = set()
+    for dpm_id, n in nota_by_dpm.items():
+        try:
+            if clasificar_nota(float(n.nota)).value in APROBADAS:
+                aprobadas.add(dpm_id)
+        except (TypeError, ValueError):
+            continue
+
+    modulo_inicio_snapshot = dpa_origen.modulo_inicio or 1
+
+    pendientes = []
+    for dpm in dpms_origen:
+        if dpm.orden < modulo_inicio_snapshot:
+            continue
+        if dpm.id_detalle_programa_modulo in aprobadas:
+            continue
+        mod = modulos_map.get(dpm.id_modulo)
+        pendientes.append(ModuloPendiente(
+            id_modulo=dpm.id_modulo,
+            nombre_modulo=mod.nombre_modulo if mod else f"Módulo #{dpm.id_modulo}",
+            orden_origen=dpm.orden,
+        ))
+
+    dpas_alumno = db.query(DetalleProgramaAlumno.id_programa_version_edicion).filter(
+        DetalleProgramaAlumno.id_alumno == dpa_origen.id_alumno,
+    ).all()
+    ediciones_alumno = {row[0] for row in dpas_alumno}
+
+    candidatos = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version == pve_origen.id_programa_version,
+        ProgramaVersionEdicion.es_historico == False,
+        ProgramaVersionEdicion.estado.in_(["programado", "en_curso", "reprogramado"]),
+        ProgramaVersionEdicion.id_programa_version_edicion != pve_origen.id_programa_version_edicion,
+        ProgramaVersionEdicion.id_programa_version_edicion.notin_(ediciones_alumno),
+    ).order_by(ProgramaVersionEdicion.fecha_inicio.asc().nullslast()).all()
+
+    destinos = []
+    for pve in candidatos:
+        dpms_dest = db.query(DetalleProgramaModulo).filter(
+            DetalleProgramaModulo.id_programa_version_edicion == pve.id_programa_version_edicion
+        ).all()
+        dpm_dest_map = {d.id_modulo: d for d in dpms_dest}
+
+        coincidencias = []
+        aprovechables = 0
+        for p in pendientes:
+            d_dest = dpm_dest_map.get(p.id_modulo)
+            disponible = d_dest is not None and d_dest.estado != "finalizado"
+            if disponible:
+                aprovechables += 1
+            coincidencias.append(ModuloCoincidencia(
+                id_modulo=p.id_modulo,
+                nombre_modulo=p.nombre_modulo,
+                orden_origen=p.orden_origen,
+                disponible=disponible,
+                estado_destino=d_dest.estado if d_dest else None,
+                posicion_destino=d_dest.orden if d_dest else None,
+            ))
+
+        total = len(pendientes)
+        afinidad = round(100 * aprovechables / total) if total else 100
+
+        cupo_ocupado = db.query(sql_func.count(DetalleProgramaAlumno.id_detalle_programa_alumno)).filter(
+            DetalleProgramaAlumno.id_programa_version_edicion == pve.id_programa_version_edicion,
+            DetalleProgramaAlumno.estado.notin_(["retirado", "observado"]),
+        ).scalar() or 0
+        cupo_disponible = (pve.cupo_maximo - cupo_ocupado) if pve.cupo_maximo is not None else None
+
+        destinos.append(DestinoRecomendado(
+            id_programa_version_edicion=pve.id_programa_version_edicion,
+            edicion=pve.edicion,
+            semestre=pve.semestre,
+            anio=pve.anio,
+            estado=pve.estado,
+            modalidad=pve.modalidad,
+            precio=float(pve.precio) if pve.precio is not None else None,
+            cupo_maximo=pve.cupo_maximo,
+            cupo_disponible=cupo_disponible,
+            fecha_inicio=pve.fecha_inicio,
+            afinidad_pct=afinidad,
+            aprovechables=aprovechables,
+            pendientes=total,
+            coincidencias=coincidencias,
+            recomendado=False,
+            motivo_recomendacion=_motivo_destino(afinidad, aprovechables, total, coincidencias),
+        ))
+
+    destinos.sort(key=lambda d: (
+        -d.aprovechables,
+        -d.afinidad_pct,
+        -(d.cupo_disponible if d.cupo_disponible is not None else -1),
+        d.fecha_inicio is None,
+        d.fecha_inicio or date.max,
+        d.precio if d.precio is not None else float("inf"),
+        d.id_programa_version_edicion,
+    ))
+
+    if destinos:
+        destinos[0].recomendado = True
+        destinos[0].motivo_recomendacion = _motivo_recomendado(destinos)
+
+    return DestinosRecomendadosResponse(
+        id_solicitud=solicitud.id_solicitud,
+        id_alumno=dpa_origen.id_alumno,
+        alumno_nombre=alumno.nombre if alumno else None,
+        alumno_apellido=alumno.apellido if alumno else None,
+        modulo_inicio_origen=modulo_inicio_snapshot,
+        pendientes=pendientes,
+        destinos=destinos,
+    )
