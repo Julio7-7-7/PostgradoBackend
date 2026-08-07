@@ -130,6 +130,7 @@ def registro(data: RegistroRequest, db: Session = Depends(get_db)):
         id_rol=rol_alumno.id_rol,
         id_profile=id_profile,
         profile_type=profile_type,
+        must_change_password=usuario.must_change_password,
         permisos=permisos,
         roles=roles_disponibles,
     )
@@ -175,6 +176,7 @@ def seleccionar_rol(data: SelectRolRequest, db: Session = Depends(get_db)):
         id_rol=rol.id_rol,
         id_profile=id_profile,
         profile_type=profile_type,
+        must_change_password=usuario.must_change_password,
         permisos=permisos,
         roles=roles_disponibles,
     )
@@ -193,13 +195,15 @@ def cambiar_password(
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    if not pwd_context.verify(data.password_actual, usuario.password_hash):
+    cambio_obligatorio = usuario.must_change_password
+    if not cambio_obligatorio and not pwd_context.verify(data.password_actual, usuario.password_hash):
         raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta")
 
     if data.password_actual == data.password_nuevo:
         raise HTTPException(status_code=400, detail="La nueva contraseña debe ser diferente a la actual")
 
     usuario.password_hash = pwd_context.hash(data.password_nuevo)
+    usuario.must_change_password = False
     db.commit()
     return {"detail": "Contraseña actualizada correctamente"}
 

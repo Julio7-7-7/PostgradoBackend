@@ -48,6 +48,7 @@ class UserResponse(BaseModel):
     id_rol: int
     id_profile: int | None = None
     profile_type: str | None = None
+    must_change_password: bool = False
     permisos: list[PermisoInfo] = []
     roles: list[RolInfo] = []
 

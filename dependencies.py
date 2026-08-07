@@ -68,6 +68,7 @@ def get_current_user(
         id_rol=rol.id_rol,
         id_profile=id_profile,
         profile_type=profile_type,
+        must_change_password=usuario.must_change_password,
         permisos=permisos,
         roles=roles_disponibles,
     )

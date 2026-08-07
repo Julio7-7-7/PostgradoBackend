@@ -97,6 +97,9 @@ class DocenteResponse(DocenteBase):
     id_docente: int
     id_usuario: int | None = None
     tiene_modulos_activos: bool = False
+    usuario_creado: bool = False
+    email_login: str | None = None
+    password_inicial: str | None = None
     created_at: datetime
     updated_at: datetime
 

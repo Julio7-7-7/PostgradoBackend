@@ -4,9 +4,15 @@ from sqlalchemy import or_
 from database import get_db
 from dependencies import get_current_user, require_permiso
 from models.docente import Docente
+from models.usuario import Usuario
+from models.usuario_rol import UsuarioRol
+from models.rol import Rol
 from models.contratacion_docente import ContratacionDocente
 from schemas.docente import DocenteCreate, DocenteUpdate, DocenteResponse
 from schemas.auth import UserResponse
+from passlib.context import CryptContext
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 router = APIRouter(
     prefix="/docentes",
@@ -21,12 +27,40 @@ def crear(data: DocenteCreate, db: Session = Depends(get_db), current_user: User
     ).first()
     if existente:
         raise HTTPException(status_code=400, detail="Ya existe un docente con ese CI o correo")
+
     nuevo = Docente(**data.model_dump())
+
+    usuario_existente = db.query(Usuario).filter(Usuario.email == data.correo).first()
+    password_inicial = None
+    usuario_creado = False
+
+    if usuario_existente:
+        nuevo.id_usuario = usuario_existente.id_usuario
+    else:
+        password_inicial = data.ci
+        rol_docente = db.query(Rol).filter(Rol.nombre == "docente").first()
+        if not rol_docente:
+            raise HTTPException(status_code=500, detail="Rol 'docente' no encontrado en el sistema")
+        usuario = Usuario(
+            email=data.correo,
+            password_hash=pwd_context.hash(password_inicial),
+            activo=True,
+            must_change_password=True,
+        )
+        db.add(usuario)
+        db.flush()
+        db.add(UsuarioRol(id_usuario=usuario.id_usuario, id_rol=rol_docente.id_rol))
+        nuevo.id_usuario = usuario.id_usuario
+        usuario_creado = True
+
     db.add(nuevo)
     db.commit()
     db.refresh(nuevo)
     resp = DocenteResponse.model_validate(nuevo)
     resp.tiene_modulos_activos = False
+    resp.usuario_creado = usuario_creado
+    resp.email_login = data.correo
+    resp.password_inicial = password_inicial
     return resp
 
 def _ids_con_contratos(db: Session) -> set[int]:
