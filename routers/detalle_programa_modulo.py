@@ -162,10 +162,18 @@ def reordenar(data: ReordenarRequest, db: Session = Depends(get_db), current_use
     if ids_recibidos != ids_reales:
         raise HTTPException(status_code=400, detail="Los módulos enviados no coinciden con los de la edición")
 
-    for d in existentes:
-        actualizar_estado_auto(d, db)
-        if d.estado == "finalizado":
-            raise HTTPException(status_code=400, detail="No se puede reordenar: hay módulos finalizados en la edición")
+    dpm_map = {d.id_detalle_programa_modulo: d for d in existentes}
+
+    for item in data.ordenes:
+        d = dpm_map.get(item.id_detalle)
+        if not d:
+            continue
+        if d.estado in ("en_curso", "finalizado") and item.orden != d.orden:
+            etiqueta = "en curso" if d.estado == "en_curso" else "finalizado"
+            raise HTTPException(
+                status_code=400,
+                detail=f"No se puede reordenar: no se puede mover un módulo {etiqueta}",
+            )
 
     for item in data.ordenes:
         db.query(DetalleProgramaModulo).filter(
@@ -179,9 +187,69 @@ def reordenar(data: ReordenarRequest, db: Session = Depends(get_db), current_use
             DetalleProgramaModulo.id_detalle_programa_modulo == item.id_detalle
         ).update({"orden": item.orden})
 
+    # Intercambio de fechas: las fechas quedan ancladas a la posición (slot).
+    # Tras el reordenamiento, cada módulo hereda las fechas del slot donde queda.
+    fechas_por_slot = {
+        idx + 1: (d.fecha_inicio, d.fecha_fin)
+        for idx, d in enumerate(sorted(existentes, key=lambda x: x.orden))
+    }
+    nuevo_orden_por_id = {item.id_detalle: item.orden for item in data.ordenes}
+
+    hoy = date.today()
+    modulos_afectados = []
+
+    for d in existentes:
+        nuevo_inicio, nuevo_fin = fechas_por_slot[nuevo_orden_por_id[d.id_detalle_programa_modulo]]
+
+        # Un módulo programado/reprogramado nunca puede quedar con fechas pasadas:
+        # si se adelanta su inicio, arranca desde hoy (nunca se marca finalizado solo).
+        if d.estado in ("programado", "reprogramado") and nuevo_inicio and nuevo_inicio < hoy:
+            duracion = (nuevo_fin - nuevo_inicio).days if nuevo_fin else 0
+            nuevo_inicio = hoy
+            nuevo_fin = hoy + timedelta(days=max(duracion, DURACION_MINIMA_DIAS))
+
+        if d.fecha_inicio == nuevo_inicio and d.fecha_fin == nuevo_fin:
+            continue
+
+        modulos_afectados.append({
+            "id_detalle_programa_modulo": d.id_detalle_programa_modulo,
+            "sigla": d.modulo.sigla if d.modulo else "",
+            "fecha_inicio": nuevo_inicio,
+            "fecha_fin": nuevo_fin,
+        })
+
+        historial = HistorialModulo(
+            id_detalle_programa_modulo=d.id_detalle_programa_modulo,
+            estado_anterior=None,
+            estado_nuevo=None,
+            motivo="Reordenamiento — fechas intercambiadas entre módulos",
+            fecha_inicio_original=d.fecha_inicio,
+            fecha_fin_original=d.fecha_fin,
+            fecha_inicio_nuevo=nuevo_inicio,
+            fecha_fin_nuevo=nuevo_fin,
+        )
+        db.add(historial)
+
+        d.fecha_inicio = nuevo_inicio
+        d.fecha_fin = nuevo_fin
+
+        contratacion_activa = db.query(ContratacionDocente).filter(
+            ContratacionDocente.id_detalle_modulo == d.id_detalle_programa_modulo,
+            ContratacionDocente.estado != "truncado",
+        ).first()
+        if contratacion_activa:
+            from routers.contrataciones_docente import verificar_disponibilidad
+            db.flush()
+            verificar_disponibilidad(db, contratacion_activa.id_docente, d.id_detalle_programa_modulo)
+            contratacion_activa.fecha_inicio = d.fecha_inicio
+            contratacion_activa.fecha_fin = d.fecha_fin
+
     db.commit()
 
-    return {"mensaje": "Orden actualizado correctamente"}
+    return {
+        "mensaje": "Orden y fechas actualizados correctamente",
+        "modulos_afectados": modulos_afectados,
+    }
 
 
 @router.get("/", response_model=list[DetalleProgramaModuloResponse])

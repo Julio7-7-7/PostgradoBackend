@@ -81,6 +81,8 @@ class SolicitudConDetalle(BaseModel):
     edicion_semestre: int | None = None
     programa_nombre: str | None = None
     dpa_estado: str | None = None
+    dpa_modulo_inicio: int | None = None
+    dpa_id_modulo_inicio: int | None = None
     created_at: datetime
     documentos: list[DocumentoSolicitudResponse] = []
     incorporacion: SolicitudIncorporacionResponse | None = None
@@ -94,3 +96,47 @@ class PreviewMigracionResponse(BaseModel):
     origen: dict
     destino: dict
     resumen: dict
+
+
+class ModuloPendiente(BaseModel):
+    id_modulo: int
+    nombre_modulo: str
+    orden_origen: int
+
+
+class ModuloCoincidencia(BaseModel):
+    id_modulo: int
+    nombre_modulo: str
+    orden_origen: int
+    disponible: bool = False
+    estado_destino: str | None = None
+    posicion_destino: int | None = None
+
+
+class DestinoRecomendado(BaseModel):
+    id_programa_version_edicion: int
+    edicion: int | None = None
+    semestre: int | None = None
+    anio: int | None = None
+    estado: str = ""
+    modalidad: str | None = None
+    precio: float | None = None
+    cupo_maximo: int | None = None
+    cupo_disponible: int | None = None
+    fecha_inicio: date | None = None
+    afinidad_pct: int = 0
+    aprovechables: int = 0
+    pendientes: int = 0
+    coincidencias: list[ModuloCoincidencia] = []
+    recomendado: bool = False
+    motivo_recomendacion: str = ""
+
+
+class DestinosRecomendadosResponse(BaseModel):
+    id_solicitud: int
+    id_alumno: int | None = None
+    alumno_nombre: str | None = None
+    alumno_apellido: str | None = None
+    modulo_inicio_origen: int | None = None
+    pendientes: list[ModuloPendiente] = []
+    destinos: list[DestinoRecomendado] = []

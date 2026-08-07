@@ -72,9 +72,17 @@ def registro(data: RegistroRequest, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="Ya existe una cuenta con ese correo electrónico")
 
-    ci_duplicada = db.query(Alumno).filter(Alumno.ci == data.ci.strip()).first()
+    ci_duplicada = None
+    if data.ci:
+        ci_duplicada = db.query(Alumno).filter(Alumno.ci == data.ci.strip()).first()
     if ci_duplicada:
         raise HTTPException(status_code=400, detail="Ya existe un alumno registrado con esa CI")
+
+    pasaporte_duplicado = None
+    if data.pasaporte:
+        pasaporte_duplicado = db.query(Alumno).filter(Alumno.pasaporte == data.pasaporte.strip().upper()).first()
+    if pasaporte_duplicado:
+        raise HTTPException(status_code=400, detail="Ya existe un alumno registrado con ese pasaporte")
 
     rol_alumno = db.query(Rol).filter(Rol.nombre == "alumno").first()
     if not rol_alumno:
@@ -92,10 +100,15 @@ def registro(data: RegistroRequest, db: Session = Depends(get_db)):
         db.add(UsuarioRol(id_usuario=usuario.id_usuario, id_rol=rol_alumno.id_rol))
 
         db.add(Alumno(
-            ci=data.ci.strip(),
-            nombre="Pendiente",
-            apellido="Pendiente",
+            ci=data.ci.strip() if data.ci else None,
+            pasaporte=data.pasaporte.strip().upper() if data.pasaporte else None,
+            nombre=data.nombre.strip().title() if data.nombre else "Pendiente",
+            apellido=data.apellido.strip().title() if data.apellido else "Pendiente",
+            fecha_nacimiento=data.fecha_nacimiento,
+            genero=data.genero.value if data.genero else None,
+            celular=data.celular.strip() if data.celular else None,
             correo=email_normalized,
+            direccion=data.direccion.strip() if data.direccion else None,
             id_usuario=usuario.id_usuario,
         ))
 
@@ -117,6 +130,7 @@ def registro(data: RegistroRequest, db: Session = Depends(get_db)):
         id_rol=rol_alumno.id_rol,
         id_profile=id_profile,
         profile_type=profile_type,
+        must_change_password=usuario.must_change_password,
         permisos=permisos,
         roles=roles_disponibles,
     )
@@ -162,6 +176,7 @@ def seleccionar_rol(data: SelectRolRequest, db: Session = Depends(get_db)):
         id_rol=rol.id_rol,
         id_profile=id_profile,
         profile_type=profile_type,
+        must_change_password=usuario.must_change_password,
         permisos=permisos,
         roles=roles_disponibles,
     )
@@ -180,13 +195,15 @@ def cambiar_password(
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    if not pwd_context.verify(data.password_actual, usuario.password_hash):
+    cambio_obligatorio = usuario.must_change_password
+    if not cambio_obligatorio and not pwd_context.verify(data.password_actual, usuario.password_hash):
         raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta")
 
     if data.password_actual == data.password_nuevo:
         raise HTTPException(status_code=400, detail="La nueva contraseña debe ser diferente a la actual")
 
     usuario.password_hash = pwd_context.hash(data.password_nuevo)
+    usuario.must_change_password = False
     db.commit()
     return {"detail": "Contraseña actualizada correctamente"}
 

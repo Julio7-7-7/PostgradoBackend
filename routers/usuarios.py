@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from models.usuario import Usuario
@@ -153,19 +154,31 @@ def crear_usuario(
     db: Session = Depends(get_db),
     current_user: UserResponse = Depends(require_permiso("usuarios.gestionar")),
 ):
-    existing = db.query(Usuario).filter(Usuario.email == data.email.strip().lower()).first()
+    email_norm = data.email.strip().lower()
+
+    existing = db.query(Usuario).filter(Usuario.email == email_norm).first()
     if existing:
         raise HTTPException(status_code=400, detail="Ya existe un usuario con ese email")
 
+    # Si ya existe un docente activo con ese correo, el usuario se vincula a él en
+    # lugar de crear un perfil duplicado (sino el docente no vería sus módulos).
+    docente_a_vincular = db.query(Docente).filter(
+        func.lower(Docente.correo) == email_norm,
+        Docente.estado == "activo",
+    ).order_by(Docente.id_docente).first()
+
     if data.ci:
+        ci_norm = data.ci.strip()
         for Model, label in [(Alumno, "alumno"), (Docente, "docente"), (Administrativo, "administrativo")]:
-            dup = db.query(Model).filter(Model.ci == data.ci.strip()).first()
+            dup = db.query(Model).filter(Model.ci == ci_norm).first()
             if dup:
+                if Model is Docente and docente_a_vincular and dup.id_docente == docente_a_vincular.id_docente:
+                    continue
                 raise HTTPException(status_code=400, detail=f"La CI ya está registrada en perfiles de tipo {label}")
 
     try:
         usuario = Usuario(
-            email=data.email.strip().lower(),
+            email=email_norm,
             password_hash=pwd_context.hash(data.password),
             activo=True,
         )
@@ -193,15 +206,22 @@ def crear_usuario(
 
         db.flush()
 
+        # Vincular al docente existente que ya tiene ese correo (si aplica)
+        if docente_a_vincular:
+            if docente_a_vincular.id_usuario and docente_a_vincular.id_usuario != usuario.id_usuario:
+                db.rollback()
+                raise HTTPException(status_code=400, detail="Ya existe un docente vinculado a otro usuario con ese correo")
+            docente_a_vincular.id_usuario = usuario.id_usuario
+
         if data.ci:
             ya_tiene_alumno = db.query(Alumno).filter(Alumno.id_usuario == usuario.id_usuario).first()
             if not ya_tiene_alumno:
                 db.add(Alumno(
-                    ci=data.ci.strip(),
+                    ci=ci_norm,
                     nombre=data.nombre.strip(),
                     apellido=data.apellido.strip(),
                     celular=data.celular,
-                    correo=data.email.strip().lower(),
+                    correo=email_norm,
                     id_usuario=usuario.id_usuario,
                 ))
 
@@ -210,25 +230,27 @@ def crear_usuario(
                 if not rol:
                     continue
                 if rol.nombre == "docente":
+                    if docente_a_vincular:
+                        continue
                     ya_tiene = db.query(Docente).filter(Docente.id_usuario == usuario.id_usuario).first()
                     if not ya_tiene:
                         db.add(Docente(
-                            ci=data.ci.strip(),
+                            ci=ci_norm,
                             nombre=data.nombre.strip(),
                             apellido=data.apellido.strip(),
                             celular=data.celular,
-                            correo=data.email.strip().lower(),
+                            correo=email_norm,
                             id_usuario=usuario.id_usuario,
                         ))
                 elif rol.nombre not in ("alumno", "docente"):
                     ya_tiene = db.query(Administrativo).filter(Administrativo.id_usuario == usuario.id_usuario).first()
                     if not ya_tiene:
                         db.add(Administrativo(
-                            ci=data.ci.strip(),
+                            ci=ci_norm,
                             nombre=data.nombre.strip(),
                             apellido=data.apellido.strip(),
                             celular=data.celular,
-                            correo=data.email.strip().lower(),
+                            correo=email_norm,
                             cargo=rol.nombre,
                             id_usuario=usuario.id_usuario,
                         ))

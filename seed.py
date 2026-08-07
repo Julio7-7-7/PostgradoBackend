@@ -114,12 +114,9 @@ def seed():
         ],
 
         "docente": [
-            "dashboard.ver",
             "modulos.ver",
             "horarios.ver",
             "notas.subir", "notas.ver",
-            "alumnos.ver",
-            "docentes.ver",
         ],
 
         "alumno": [

@@ -11,6 +11,7 @@ class Usuario(Base):
     email = Column(String(100), nullable=False, unique=True)
     password_hash = Column(String(200), nullable=False)
     activo = Column(Boolean, default=True, nullable=False)
+    must_change_password = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
