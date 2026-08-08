@@ -17,6 +17,7 @@ from schemas.nota import (
     NotaCreate, NotaUpdate, NotaResponse,
     NotaEdicionResponse, NotaDocenteResponse, NotaModuloResponse,
     ModuloTranscriptItem, InscripcionTranscriptItem, EdicionInfoItem, TranscriptResponse,
+    NotasEdicionResponse,
 )
 from schemas.enums import clasificar_nota, redondear_nota, ESTADOS_CON_CALIFICACION
 from schemas.auth import UserResponse
@@ -48,7 +49,7 @@ def _es_modulo_en_curso(db: Session, id_dpm: int) -> bool:
     return dm is not None and dm.estado == "en_curso"
 
 
-@router.get("/por-edicion/{id_edicion}", response_model=list[NotaEdicionResponse])
+@router.get("/por-edicion/{id_edicion}", response_model=NotasEdicionResponse)
 def notas_por_edicion(
     id_edicion: int,
     db: Session = Depends(get_db),
@@ -83,6 +84,7 @@ def notas_por_edicion(
         modulos_map[dm.id_detalle_programa_modulo] = {
             "id_detalle_programa_modulo": dm.id_detalle_programa_modulo,
             "nombre": mod.nombre_modulo if mod else f"Módulo #{dm.id_modulo}",
+            "sigla": mod.sigla if mod else "",
             "orden": dm.orden,
         }
 
@@ -135,7 +137,12 @@ def notas_por_edicion(
             "promedio": promedio,
         })
 
-    return resultado
+    modulos = sorted(modulos_map.values(), key=lambda m: m["orden"])
+    return {
+        "id_programa_version_edicion": id_edicion,
+        "modulos": modulos,
+        "alumnos": resultado,
+    }
 
 
 @router.post("/", response_model=NotaResponse, status_code=201)
