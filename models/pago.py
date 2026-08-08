@@ -9,6 +9,7 @@ class Pago(Base):
 
     id_pago = Column(Integer, primary_key=True, index=True, autoincrement=True)
     id_detalle_programa_alumno = Column(Integer, ForeignKey("detalle_programa_alumno.id_detalle_programa_alumno"), nullable=False)
+    id_detalle_programa_modulo = Column(Integer, ForeignKey("detalle_programa_modulo.id_detalle_programa_modulo"), nullable=True)
     monto = Column(Numeric(10, 2), nullable=False)
     fecha_pago = Column(Date, nullable=False)
     concepto = Column(String(100), nullable=False)
@@ -20,3 +21,4 @@ class Pago(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
     detalle_programa_alumno = relationship("DetalleProgramaAlumno", back_populates="pagos")
+    detalle_programa_modulo = relationship("DetalleProgramaModulo")
