@@ -61,6 +61,19 @@ class NotaEdicionResponse(BaseModel):
     promedio: int
 
 
+class ModuloEdicionResumen(BaseModel):
+    id_detalle_programa_modulo: int
+    nombre: str
+    sigla: str
+    orden: int
+
+
+class NotasEdicionResponse(BaseModel):
+    id_programa_version_edicion: int
+    modulos: list[ModuloEdicionResumen]
+    alumnos: list[NotaEdicionResponse]
+
+
 class DocenteEdicionInfo(BaseModel):
     id_programa_version_edicion: int
     edicion_numero: int

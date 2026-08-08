@@ -18,6 +18,7 @@ class ProgramaVersionEdicion(Base):
     cupo_maximo = Column(Integer, nullable=True)
     descripcion = Column(String(500), nullable=True)
     precio = Column(Float, nullable=True)
+    matricula = Column(Float, nullable=True, default=0)
     es_historico = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

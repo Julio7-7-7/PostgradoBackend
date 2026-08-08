@@ -12,6 +12,7 @@ class EstadoPagoEnum(str, Enum):
 
 class PagoCreate(BaseModel):
     id_detalle_programa_alumno: int
+    id_detalle_programa_modulo: int | None = None
     monto: Decimal
     fecha_pago: date
     concepto: str
@@ -22,6 +23,7 @@ class PagoCreate(BaseModel):
 
 
 class PagoUpdate(BaseModel):
+    id_detalle_programa_modulo: int | None = None
     monto: Decimal | None = None
     fecha_pago: date | None = None
     concepto: str | None = None
@@ -34,6 +36,7 @@ class PagoUpdate(BaseModel):
 class PagoResponse(BaseModel):
     id_pago: int
     id_detalle_programa_alumno: int
+    id_detalle_programa_modulo: int | None
     monto: Decimal
     fecha_pago: date
     concepto: str
