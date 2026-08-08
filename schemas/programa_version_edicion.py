@@ -22,6 +22,7 @@ class ProgramaVersionEdicionBase(BaseModel):
     cupo_maximo: int | None = None
     descripcion: str | None = None
     precio: float | None = None
+    matricula: float | None = None
 
     @field_validator("cupo_maximo")
     @classmethod
@@ -35,6 +36,13 @@ class ProgramaVersionEdicionBase(BaseModel):
     def validar_precio(cls, v):
         if v is not None and v < 0:
             raise ValueError("El precio no puede ser negativo")
+        return v
+
+    @field_validator("matricula")
+    @classmethod
+    def validar_matricula(cls, v):
+        if v is not None and v < 0:
+            raise ValueError("La matrícula no puede ser negativa")
         return v
 
     @field_validator("semestre")
@@ -78,6 +86,7 @@ class ProgramaVersionEdicionUpdate(BaseModel):
     cupo_maximo: int | None = None
     descripcion: str | None = None
     precio: float | None = None
+    matricula: float | None = None
 
     @field_validator("cupo_maximo")
     @classmethod
@@ -91,6 +100,13 @@ class ProgramaVersionEdicionUpdate(BaseModel):
     def validar_precio(cls, v):
         if v is not None and v < 0:
             raise ValueError("El precio no puede ser negativo")
+        return v
+
+    @field_validator("matricula")
+    @classmethod
+    def validar_matricula(cls, v):
+        if v is not None and v < 0:
+            raise ValueError("La matrícula no puede ser negativa")
         return v
 
     @field_validator("semestre")
