@@ -1,5 +1,6 @@
+from typing import Literal
 from pydantic import BaseModel, ConfigDict
-from datetime import datetime
+from datetime import datetime, date
 
 
 class PermisoResponse(BaseModel):
@@ -46,6 +47,7 @@ class UserAdminResponse(BaseModel):
     roles: list[str]
     id_roles: list[int]
     perfiles: list[ProfileInfo] = []
+    password_inicial: str | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -53,12 +55,18 @@ class UserAdminResponse(BaseModel):
 
 class UserAdminCreate(BaseModel):
     email: str
-    password: str
+    tipo_persona: Literal["alumno", "docente", "administrativo"] = "alumno"
     roles: list[int]
     ci: str
     nombre: str
     apellido: str
     celular: str | None = None
+    cargo: str | None = None
+    fecha_nacimiento: date | None = None
+    genero: str | None = None
+    extension: str | None = None
+    grado: str | None = None
+    titulo: str | None = None
 
 
 class UserAdminUpdate(BaseModel):

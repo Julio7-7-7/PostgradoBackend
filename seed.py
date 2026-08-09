@@ -69,7 +69,7 @@ def seed():
             "programas.ver", "programas.crear", "programas.editar",
             "ediciones.ver", "ediciones.crear", "ediciones.editar",
             "modulos.ver", "modulos.crear", "modulos.editar",
-            "docentes.ver", "docentes.crear", "docentes.editar",
+            "docentes.ver",
             "contrataciones.ver", "contrataciones.crear", "contrataciones.editar",
             "horarios.ver", "horarios.crear", "horarios.editar",
             "alumnos.ver",
