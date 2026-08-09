@@ -21,7 +21,7 @@ class HistorialInscripcion(Base):
     id_solicitud = Column(
         Integer,
         ForeignKey("solicitud.id_solicitud"),
-        nullable=False,
+        nullable=True,
     )
     tipo_movimiento = Column(String(20), nullable=False)
     motivo = Column(Text, nullable=True)
