@@ -1,50 +1,53 @@
 from datetime import datetime, date
 from enum import Enum
 from decimal import Decimal
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class EstadoPagoEnum(str, Enum):
-    pendiente = "pendiente"
+class EstadoTransaccionEnum(str, Enum):
     confirmado = "confirmado"
-    rechazado = "rechazado"
+    anulado = "anulado"
 
 
-class PagoCreate(BaseModel):
+class TransaccionPagoCreate(BaseModel):
     id_detalle_programa_alumno: int
     id_detalle_programa_modulo: int | None = None
     monto: Decimal
     fecha_pago: date
-    concepto: str
-    comprobante_url: str | None = None
-    numero_referencia: str | None = None
-    estado: EstadoPagoEnum = EstadoPagoEnum.pendiente
+    comprobante: str | None = None
     observaciones: str | None = None
 
 
-class PagoUpdate(BaseModel):
-    id_detalle_programa_modulo: int | None = None
-    monto: Decimal | None = None
-    fecha_pago: date | None = None
-    concepto: str | None = None
-    comprobante_url: str | None = None
-    numero_referencia: str | None = None
-    estado: EstadoPagoEnum | None = None
-    observaciones: str | None = None
+class TransaccionPagoBaja(BaseModel):
+    motivo_anulacion: str = Field(..., min_length=1)
 
 
-class PagoResponse(BaseModel):
+class PagoItemResponse(BaseModel):
     id_pago: int
+    id_transaccion: int
     id_detalle_programa_alumno: int
     id_detalle_programa_modulo: int | None
     monto: Decimal
     fecha_pago: date
     concepto: str
-    comprobante_url: str | None
-    numero_referencia: str | None
+    observaciones: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TransaccionPagoResponse(BaseModel):
+    id_transaccion: int
+    id_detalle_programa_alumno: int
+    monto_total: Decimal
+    fecha_pago: date
+    comprobante: str | None
     estado: str
-    observaciones: str | None
+    motivo_anulacion: str | None
+    anulado_por_id_usuario: int | None
+    anulado_fecha: datetime | None
+    creado_por_id_usuario: int | None
     created_at: datetime
     updated_at: datetime
+    pagos: list[PagoItemResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
