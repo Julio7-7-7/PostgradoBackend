@@ -314,7 +314,7 @@ def pagos_por_edicion(
         est = _estado_financiero(db, detalle, dpm_list, precio, matricula)
 
         total_esperado = round(est["matricula_esperado"] + est["total_esperado_cuotas"], 2)
-        pct_total = round(est["total_pagado"] / total_esperado * 100, 1) if total_esperado else 0.0
+        pct_total = round(min(100.0, est["total_pagado"] / total_esperado * 100), 1) if total_esperado else 0.0
 
         cuotas = []
         for dpm in dpm_list:
@@ -328,7 +328,7 @@ def pagos_por_edicion(
                 "sigla": next((m["sigla"] for m in modulos if m["id_detalle_programa_modulo"] == dpm.id_detalle_programa_modulo), ""),
                 "esperado": esperado,
                 "pagado": pagado,
-                "pct": round(pagado / esperado * 100, 1) if esperado else 0.0,
+                "pct": round(min(100.0, pagado / esperado * 100), 1) if esperado else 0.0,
                 "pagos": est["cuota_pagos"].get(dpm.id_detalle_programa_modulo, []),
             })
 
@@ -350,7 +350,7 @@ def pagos_por_edicion(
             "matricula": {
                 "esperado": matricula_esperado,
                 "pagado": matricula_pagado,
-                "pct": round(matricula_pagado / matricula_esperado * 100, 1) if matricula_esperado else 0.0,
+                "pct": round(min(100.0, matricula_pagado / matricula_esperado * 100), 1) if matricula_esperado else 0.0,
                 "pagos": est["matricula_pagos"],
             },
             "cuotas": cuotas,
@@ -441,7 +441,7 @@ def transcript_pagos(
         esperado_cuotas = float(sum(est["expecteds"].values()))
         pagado_cuotas = float(sum(v for v in est["pagado_por_dpm"].values()))
         total_esperado = esperado_mat + esperado_cuotas
-        pct = round((est["total_pagado"] / total_esperado) * 100, 1) if total_esperado > 0 else 0
+        pct = round(min(100.0, (est["total_pagado"] / total_esperado) * 100), 1) if total_esperado > 0 else 0
         financiero = {
             "matricula": {
                 "esperado": round(esperado_mat, 2),
