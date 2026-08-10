@@ -26,6 +26,7 @@ from models.usuario_rol import UsuarioRol
 from models.administrativo import Administrativo
 from models.modalidad_tipo_programa import ModalidadTipoPrograma
 from models.pago import Pago
+from models.transaccion_pago import TransaccionPago
 from models.nota import Nota
 from models.historial_inscripcion import HistorialInscripcion
 from models.tipo_solicitud import TipoSolicitud

@@ -569,6 +569,16 @@ def editar(id: int, data: DetalleProgramaAlumnoUpdate, db: Session = Depends(get
     ).first()
 
 
+def _registrar_retiro(db: Session, id_dpa: int) -> None:
+    db.add(HistorialInscripcion(
+        id_detalle_origen=id_dpa,
+        id_detalle_destino=id_dpa,
+        id_solicitud=None,
+        tipo_movimiento="retiro",
+        motivo=None,
+    ))
+
+
 @router.patch("/{id}/retirar", response_model=DetalleProgramaAlumnoResponse)
 def retirar(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(get_current_user)):
     if current_user.profile_type != "alumno" or not current_user.id_profile:
@@ -581,6 +591,7 @@ def retirar(id: int, db: Session = Depends(get_db), current_user: UserResponse =
         raise HTTPException(status_code=404, detail="Inscripción no encontrada")
     _validar_transicion_estado(detalle.estado, "retirado")
     detalle.estado = "retirado"
+    _registrar_retiro(db, id)
     db.commit()
     return _cargar_con_relations(
         db.query(DetalleProgramaAlumno).filter(
@@ -598,6 +609,7 @@ def eliminar(id: int, db: Session = Depends(get_db), current_user: UserResponse 
         raise HTTPException(status_code=404, detail="No encontrado")
     _validar_transicion_estado(detalle.estado, "retirado")
     detalle.estado = "retirado"
+    _registrar_retiro(db, id)
     db.commit()
     return _cargar_con_relations(
         db.query(DetalleProgramaAlumno).filter(

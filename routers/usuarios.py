@@ -177,16 +177,18 @@ def crear_usuario(
                 raise HTTPException(status_code=400, detail=f"La CI ya está registrada en perfiles de tipo {label}")
 
     try:
+        password_inicial = ci_norm
         usuario = Usuario(
             email=email_norm,
-            password_hash=pwd_context.hash(data.password),
+            password_hash=pwd_context.hash(ci_norm),
             activo=True,
+            must_change_password=True,
         )
         db.add(usuario)
         db.flush()
 
-        tiene_alumno = False
         roles_map = {}
+        tiene_alumno = False
         if data.roles:
             roles_existentes = db.query(Rol).filter(Rol.id_rol.in_(data.roles)).all()
             roles_map = {r.id_rol: r for r in roles_existentes}
@@ -199,7 +201,9 @@ def crear_usuario(
                 if rol.nombre == "alumno":
                     tiene_alumno = True
 
-        if not tiene_alumno:
+        # Rol base alumno solo cuando la persona es de tipo alumno.
+        es_alumno = data.tipo_persona == "alumno" or tiene_alumno
+        if es_alumno and not tiene_alumno:
             rol_alumno = db.query(Rol).filter(Rol.nombre == "alumno").first()
             if rol_alumno:
                 db.add(UsuarioRol(id_usuario=usuario.id_usuario, id_rol=rol_alumno.id_rol))
@@ -214,46 +218,51 @@ def crear_usuario(
             docente_a_vincular.id_usuario = usuario.id_usuario
 
         if data.ci:
-            ya_tiene_alumno = db.query(Alumno).filter(Alumno.id_usuario == usuario.id_usuario).first()
-            if not ya_tiene_alumno:
+            if es_alumno:
                 db.add(Alumno(
                     ci=ci_norm,
                     nombre=data.nombre.strip(),
                     apellido=data.apellido.strip(),
                     celular=data.celular,
                     correo=email_norm,
+                    fecha_nacimiento=data.fecha_nacimiento,
+                    genero=data.genero,
                     id_usuario=usuario.id_usuario,
                 ))
 
+            creo_docente = False
+            creo_administrativo = False
             for id_rol in data.roles:
                 rol = roles_map.get(id_rol)
                 if not rol:
                     continue
                 if rol.nombre == "docente":
-                    if docente_a_vincular:
+                    if docente_a_vincular or creo_docente:
                         continue
-                    ya_tiene = db.query(Docente).filter(Docente.id_usuario == usuario.id_usuario).first()
-                    if not ya_tiene:
-                        db.add(Docente(
-                            ci=ci_norm,
-                            nombre=data.nombre.strip(),
-                            apellido=data.apellido.strip(),
-                            celular=data.celular,
-                            correo=email_norm,
-                            id_usuario=usuario.id_usuario,
-                        ))
-                elif rol.nombre not in ("alumno", "docente"):
-                    ya_tiene = db.query(Administrativo).filter(Administrativo.id_usuario == usuario.id_usuario).first()
-                    if not ya_tiene:
-                        db.add(Administrativo(
-                            ci=ci_norm,
-                            nombre=data.nombre.strip(),
-                            apellido=data.apellido.strip(),
-                            celular=data.celular,
-                            correo=email_norm,
-                            cargo=rol.nombre,
-                            id_usuario=usuario.id_usuario,
-                        ))
+                    db.add(Docente(
+                        ci=ci_norm,
+                        nombre=data.nombre.strip(),
+                        apellido=data.apellido.strip(),
+                        celular=data.celular,
+                        correo=email_norm,
+                        genero=data.genero,
+                        extension=data.extension,
+                        grado=data.grado,
+                        titulo=data.titulo,
+                        id_usuario=usuario.id_usuario,
+                    ))
+                    creo_docente = True
+                elif rol.nombre not in ("alumno", "docente") and not creo_administrativo:
+                    db.add(Administrativo(
+                        ci=ci_norm,
+                        nombre=data.nombre.strip(),
+                        apellido=data.apellido.strip(),
+                        celular=data.celular,
+                        correo=email_norm,
+                        cargo=data.cargo or rol.nombre,
+                        id_usuario=usuario.id_usuario,
+                    ))
+                    creo_administrativo = True
 
         db.commit()
         db.refresh(usuario)
@@ -263,7 +272,9 @@ def crear_usuario(
         db.rollback()
         raise HTTPException(status_code=500, detail="Error al crear el usuario")
 
-    return _usuario_a_response(usuario)
+    resp = _usuario_a_response(usuario)
+    resp.password_inicial = password_inicial
+    return resp
 
 
 @router.patch("/{id_usuario}", response_model=UserAdminResponse)
