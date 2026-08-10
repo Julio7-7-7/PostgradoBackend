@@ -899,6 +899,7 @@ def preview_migracion(
 ):
     from models.nota import Nota
     from models.pago import Pago
+    from models.transaccion_pago import TransaccionPago
     from models.detalle_programa_modulo import DetalleProgramaModulo
     from models.modulo import Modulo
     from schemas.enums import clasificar_nota
@@ -969,13 +970,15 @@ def preview_migracion(
             })
     notas_preview.sort(key=lambda x: x["modulo_orden"])
 
-    pagos_origen = db.query(Pago).filter(
-        Pago.id_detalle_programa_alumno == dpa_origen.id_detalle_programa_alumno
+    pagos_origen = db.query(Pago, TransaccionPago).join(
+        TransaccionPago, TransaccionPago.id_transaccion == Pago.id_transaccion
+    ).filter(
+        TransaccionPago.id_detalle_programa_alumno == dpa_origen.id_detalle_programa_alumno
     ).all()
 
     pagos_preview = [
-        {"concepto": p.concepto, "monto": float(p.monto), "estado": p.estado, "fecha_pago": str(p.fecha_pago)}
-        for p in pagos_origen
+        {"concepto": p.concepto, "monto": float(p.monto), "estado": t.estado, "fecha_pago": str(t.fecha_pago)}
+        for p, t in pagos_origen
     ]
 
     pve_destino = db.query(ProgramaVersionEdicion).options(
@@ -1043,7 +1046,7 @@ def preview_migracion(
             "pagos": pagos_preview,
             "total_notas": len(notas_preview),
             "total_pagos": len(pagos_preview),
-            "monto_total_pagos": sum(float(p.monto) for p in pagos_origen if p.estado == "aprobado"),
+            "monto_total_pagos": sum(float(p.monto) for p, t in pagos_origen if t.estado == "confirmado"),
         },
         "destino": {
             "id_programa_version_edicion": pve_destino.id_programa_version_edicion,
@@ -1057,7 +1060,7 @@ def preview_migracion(
         "resumen": {
             "notas_a_migrar": notas_match_count,
             "pagos_a_migrar": len(pagos_preview),
-            "monto_a_migrar": sum(float(p.monto) for p in pagos_origen if p.estado == "aprobado"),
+            "monto_a_migrar": sum(float(p.monto) for p, t in pagos_origen if t.estado == "confirmado"),
         },
     }
 

@@ -9,6 +9,7 @@ from models.tipo_programa import TipoPrograma
 from models.alumno import Alumno
 from models.detalle_programa_alumno import DetalleProgramaAlumno
 from models.pago import Pago
+from models.transaccion_pago import TransaccionPago
 from schemas.auth import UserResponse
 
 router = APIRouter(
@@ -30,11 +31,15 @@ def stats(db: Session = Depends(get_db), current_user: UserResponse = Depends(re
         DetalleProgramaAlumno.estado.in_(["inscrito", "incorporado"])
     ).scalar() or 0
 
-    total_pagos_confirmados = db.query(func.count(Pago.id_pago)).filter(
-        Pago.estado == "confirmado"
+    total_pagos_confirmados = db.query(func.count(Pago.id_pago)).join(
+        TransaccionPago, TransaccionPago.id_transaccion == Pago.id_transaccion
+    ).filter(
+        TransaccionPago.estado == "confirmado"
     ).scalar() or 0
-    monto_total_pagos = db.query(func.coalesce(func.sum(Pago.monto), 0)).filter(
-        Pago.estado == "confirmado"
+    monto_total_pagos = db.query(func.coalesce(func.sum(Pago.monto), 0)).join(
+        TransaccionPago, TransaccionPago.id_transaccion == Pago.id_transaccion
+    ).filter(
+        TransaccionPago.estado == "confirmado"
     ).scalar() or 0
 
     return {

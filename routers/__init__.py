@@ -20,6 +20,7 @@ from routers import roles
 from routers import permisos
 from routers import usuarios
 from routers import pago
+from routers import transaccion_pago
 from routers import nota
 from routers import dashboard
 from routers import solicitud
@@ -48,6 +49,7 @@ all_routers = [
     permisos.router,
     usuarios.router,
     pago.router,
+    transaccion_pago.router,
     nota.router,
     dashboard.router,
     solicitud.router,
