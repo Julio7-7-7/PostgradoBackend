@@ -100,7 +100,7 @@ def _estado_financiero(db: Session, detalle, dpm_list: list, precio: float, matr
                 beca_activa = False
                 beca_motivo = (
                     f"{'Reprobó' if cal == 'insuficiente' else 'Abandonó'} el Módulo {dpm.orden}"
-                    f" — las cuotas restantes pasan a precio pleno"
+                    f" — todas las cuotas pasan a precio pleno"
                 )
                 break
 
@@ -211,17 +211,11 @@ def _estado_financiero(db: Session, detalle, dpm_list: list, precio: float, matr
 
 
 def _planificar_cobro(db: Session, detalle, dpm_list: list, precio: float, target_dpm_id, monto_total: float, matricula: float = 0.0):
-    """Reparte el monto: la matrícula siempre se cobra primero, luego las cuotas desde el target."""
+    """Reparte el monto: la matrícula siempre se cobra primero, luego las cuotas desde el target.
+    Rechaza con 400 si el monto excede el saldo pendiente cobrable."""
     est = _estado_financiero(db, detalle, dpm_list, precio, matricula)
-    asignaciones: list[tuple] = []
-    restante = monto_total
 
     resto_mat = max(0.0, est["matricula_esperado"] - est["matricula_pagado"])
-    if restante > 0 and resto_mat > 0:
-        m = min(resto_mat, restante)
-        asignaciones.append((None, m))
-        restante -= m
-
     if target_dpm_id is None:
         start = 0
     else:
@@ -229,6 +223,24 @@ def _planificar_cobro(db: Session, detalle, dpm_list: list, precio: float, targe
             (i for i, d in enumerate(dpm_list) if d.id_detalle_programa_modulo == target_dpm_id),
             0,
         )
+
+    saldo_cobrable = resto_mat + sum(
+        max(0.0, est["expecteds"].get(d.id_detalle_programa_modulo, 0.0) - est["pagado_por_dpm"].get(d.id_detalle_programa_modulo, 0.0))
+        for d in dpm_list[start:]
+    )
+    if monto_total > saldo_cobrable + 0.005:
+        raise HTTPException(
+            status_code=400,
+            detail=f"El monto excede el saldo pendiente ({round(saldo_cobrable, 2)} Bs)",
+        )
+
+    asignaciones: list[tuple] = []
+    restante = monto_total
+    if restante > 0 and resto_mat > 0:
+        m = min(resto_mat, restante)
+        asignaciones.append((None, m))
+        restante -= m
+
     for i in range(start, len(dpm_list)):
         if restante <= 0:
             break
@@ -239,12 +251,6 @@ def _planificar_cobro(db: Session, detalle, dpm_list: list, precio: float, targe
         m = min(resto, restante)
         asignaciones.append((dpm, m))
         restante -= m
-    if restante > 0:
-        if asignaciones:
-            dpm, m = asignaciones[-1]
-            asignaciones[-1] = (dpm, m + restante)
-        else:
-            asignaciones.append((None, restante))
     return asignaciones
 
 
