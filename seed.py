@@ -260,9 +260,9 @@ def seed():
         db.add(requisito_beca)
         db.commit()
         db.refresh(requisito_beca)
-        print(f"  ✅ Requisito (descuento): Media Beca UAGRM")
+        print("  ✅ Requisito (descuento): Media Beca UAGRM")
     else:
-        print(f"  🔄 Requisito (descuento): Media Beca UAGRM")
+        print("  🔄 Requisito (descuento): Media Beca UAGRM")
 
     tipos_programa_data = [
         {"nombre": "Diplomado", "duracion_minima_meses": 6},
@@ -318,9 +318,9 @@ def seed():
         db.add(descuento_beca)
         db.commit()
         db.refresh(descuento_beca)
-        print(f"  ✅ Tipo descuento: Beca 50%")
+        print("  ✅ Tipo descuento: Beca 50%")
     else:
-        print(f"  🔄 Tipo descuento: Beca 50%")
+        print("  🔄 Tipo descuento: Beca 50%")
 
     descuento_contado = db.query(TipoDescuento).filter(
         TipoDescuento.nombre == "Descuento 10% Pago al Contado"
@@ -335,9 +335,9 @@ def seed():
         db.add(descuento_contado)
         db.commit()
         db.refresh(descuento_contado)
-        print(f"  ✅ Tipo descuento: Descuento 10% Pago al Contado")
+        print("  ✅ Tipo descuento: Descuento 10% Pago al Contado")
     else:
-        print(f"  🔄 Tipo descuento: Descuento 10% Pago al Contado")
+        print("  🔄 Tipo descuento: Descuento 10% Pago al Contado")
 
     vinculo = db.query(ModalidadTipoDescuento).filter(
         ModalidadTipoDescuento.id_modalidad_academica == modalidad_ed_continua.id_modalidad_academica,
@@ -349,9 +349,9 @@ def seed():
             id_tipo_descuento=descuento_beca.id_tipo_descuento,
         ))
         db.commit()
-        print(f"  ✅ Beca 50% → Educación Continua")
+        print("  ✅ Beca 50% → Educación Continua")
     else:
-        print(f"  🔄 Beca 50% → Educación Continua ya vinculado")
+        print("  🔄 Beca 50% → Educación Continua ya vinculado")
 
     vinculo2 = db.query(ModalidadTipoDescuento).filter(
         ModalidadTipoDescuento.id_modalidad_academica == modalidad_ed_continua.id_modalidad_academica,
@@ -363,9 +363,9 @@ def seed():
             id_tipo_descuento=descuento_contado.id_tipo_descuento,
         ))
         db.commit()
-        print(f"  ✅ Descuento 10% → Educación Continua")
+        print("  ✅ Descuento 10% → Educación Continua")
     else:
-        print(f"  🔄 Descuento 10% → Educación Continua ya vinculado")
+        print("  🔄 Descuento 10% → Educación Continua ya vinculado")
 
     vinculo3 = db.query(ModalidadTipoDescuento).filter(
         ModalidadTipoDescuento.id_modalidad_academica == modalidad_profesionales.id_modalidad_academica,
@@ -377,9 +377,9 @@ def seed():
             id_tipo_descuento=descuento_contado.id_tipo_descuento,
         ))
         db.commit()
-        print(f"  ✅ Descuento 10% → Profesionales")
+        print("  ✅ Descuento 10% → Profesionales")
     else:
-        print(f"  🔄 Descuento 10% → Profesionales ya vinculado")
+        print("  🔄 Descuento 10% → Profesionales ya vinculado")
 
     vinculo_req = db.query(TipoDescuentoRequisito).filter(
         TipoDescuentoRequisito.id_tipo_descuento == descuento_beca.id_tipo_descuento,
@@ -391,9 +391,9 @@ def seed():
             id_requisito=requisito_beca.id_requisito,
         ))
         db.commit()
-        print(f"  ✅ Beca 50% requiere: Media Beca UAGRM")
+        print("  ✅ Beca 50% requiere: Media Beca UAGRM")
     else:
-        print(f"  🔄 Beca 50% requiere: Media Beca UAGRM ya vinculado")
+        print("  🔄 Beca 50% requiere: Media Beca UAGRM ya vinculado")
 
     email = "julio.toledo2030@gmail.com"
     password = pwd_context.hash("adminjt")

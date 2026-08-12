@@ -1,11 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
 from database import get_db
 from models.rol import Rol
 from models.permiso import Permiso
 from models.roles_permiso import RolesPermiso
-from models.usuario import Usuario
 from models.usuario_rol import UsuarioRol
 from schemas.admin import RolCreate, RolUpdate, RolResponse, PermisoResponse, BatchAsignacionesRequest
 from dependencies import get_current_user, require_permiso
@@ -167,24 +165,7 @@ def actualizar_rol(
     )
 
 
-@router.delete("/{id_rol}", status_code=204)
-def eliminar_rol(
-    id_rol: int,
-    db: Session = Depends(get_db),
-    _: UserResponse = Depends(require_permiso("roles.gestionar")),
-):
-    rol = db.query(Rol).filter(Rol.id_rol == id_rol).first()
-    if not rol:
-        raise HTTPException(status_code=404, detail="Rol no encontrado")
-    tiene_usuarios = db.query(UsuarioRol).filter(UsuarioRol.id_rol == id_rol).first()
-    if tiene_usuarios:
-        raise HTTPException(
-            status_code=400,
-            detail="No se puede eliminar un rol que tiene usuarios asignados",
-        )
-    db.query(RolesPermiso).filter(RolesPermiso.id_rol == id_rol).delete()
-    db.delete(rol)
-    db.commit()
+
 
 
 @router.post("/asignaciones/batch", status_code=200)

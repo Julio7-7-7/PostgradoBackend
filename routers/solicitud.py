@@ -13,7 +13,6 @@ from models.solicitud_requisito import SolicitudRequisito
 from models.detalle_programa_alumno import DetalleProgramaAlumno
 from models.programa_version_edicion import ProgramaVersionEdicion
 from models.programa_version import ProgramaVersion
-from models.programa import Programa
 from models.detalle_programa_modulo import DetalleProgramaModulo
 from models.alumno import Alumno
 from models.requisito import Requisito
@@ -33,7 +32,7 @@ from schemas.solicitud import (
     DestinosRecomendadosResponse,
 )
 from schemas.auth import UserResponse
-from routers.utils import guardar_documento_base64, eliminar_foto, inferir_tipo_movimiento, resolver_modulo_inicio
+from routers.utils import guardar_documento_base64, inferir_tipo_movimiento, resolver_modulo_inicio
 
 router = APIRouter(
     prefix="/solicitud",
@@ -451,7 +450,6 @@ def listar(
     if tipo:
         query = query.join(TipoSolicitud).filter(TipoSolicitud.codigo == tipo)
 
-    total = query.count()
     offset = (page - 1) * per_page
     solicitudes = query.order_by(Solicitud.id_solicitud.desc()).offset(offset).limit(per_page).all()
     return _load_con_detalle(solicitudes, db)
@@ -932,7 +930,6 @@ def preview_migracion(
         ProgramaVersionEdicion.id_programa_version_edicion == dpa_origen.id_programa_version_edicion
     ).first()
     pv_origen = pve_origen.programa_version if pve_origen else None
-    prog_origen = pv_origen.programa if pv_origen else None
 
     notas_origen = db.query(Nota).filter(
         Nota.id_detalle_programa_alumno == dpa_origen.id_detalle_programa_alumno
@@ -942,7 +939,6 @@ def preview_migracion(
     dpms_origen = db.query(DetalleProgramaModulo).filter(
         DetalleProgramaModulo.id_detalle_programa_modulo.in_(dpm_ids_origen)
     ).all() if dpm_ids_origen else []
-    dpm_origen_map = {dpm.id_detalle_programa_modulo: dpm for dpm in dpms_origen}
 
     modulos_origen_ids = {dpm.id_modulo for dpm in dpms_origen}
     modulos_origen = db.query(Modulo).filter(
@@ -1016,7 +1012,6 @@ def preview_migracion(
             "match": nombre.lower() in nombres_origen,
         })
 
-    from routers.detalle_programa_alumno import _validar_cupo
     cupo_disponible = None
     try:
         cupo_disponible = pve_destino.cupo_maximo - db.query(sql_func.count(

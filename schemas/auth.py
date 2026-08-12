@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
-from datetime import datetime, date
+from datetime import date
 from enum import Enum
 from schemas.enums import GeneroEnum
 
