@@ -12,13 +12,13 @@ from models.detalle_programa_modulo import DetalleProgramaModulo
 from models.historial_inscripcion import HistorialInscripcion
 from models.modulo import Modulo
 from models.nota import Nota
+from models.orden_pago import OrdenPago
 from models.pago import Pago
 from models.programa_version_edicion import ProgramaVersionEdicion
 from models.transaccion_pago import TransaccionPago
 from models.usuario import Usuario
 from schemas.auth import UserResponse
 from schemas.enums import clasificar_nota
-from schemas.transaccion_pago import TransaccionPagoCreate
 
 router = APIRouter(
     prefix="/pagos",
@@ -31,6 +31,54 @@ BECA_PERDIDA_CALIFICACIONES = {"insuficiente", "abandono"}
 
 def _descuento_porcentaje(detalle) -> float:
     return max(0.0, min(100.0, float(detalle.descuento_aplicado or 0)))
+
+
+def _contexto(db: Session, detalle: DetalleProgramaAlumno) -> dict:
+    alumno = db.query(Alumno).filter(Alumno.id_alumno == detalle.id_alumno).first()
+    edicion = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion == detalle.id_programa_version_edicion
+    ).first()
+    programa = None
+    if edicion and edicion.programa_version and edicion.programa_version.programa:
+        programa = edicion.programa_version.programa.nombre_programa
+    return {
+        "alumno": {
+            "id_alumno": detalle.id_alumno,
+            "nombre": alumno.nombre if alumno else "N/A",
+            "apellido": alumno.apellido if alumno else "N/A",
+            "ci": alumno.ci if alumno else None,
+        },
+        "edicion": {
+            "programa": programa,
+            "edicion": edicion.edicion if edicion else None,
+            "anio": edicion.anio if edicion else None,
+            "semestre": edicion.semestre if edicion else None,
+        },
+    }
+
+
+def _serializar_orden(db: Session, orden: OrdenPago) -> dict:
+    detalle = db.query(DetalleProgramaAlumno).filter(
+        DetalleProgramaAlumno.id_detalle_programa_alumno == orden.id_detalle_programa_alumno
+    ).first()
+    contexto = _contexto(db, detalle) if detalle else {"alumno": None, "edicion": None}
+    return {
+        "id_orden_pago": orden.id_orden_pago,
+        "numero": orden.numero,
+        "id_detalle_programa_alumno": orden.id_detalle_programa_alumno,
+        "fecha_emision": str(orden.fecha_emision),
+        "monto_total": float(orden.monto_total),
+        "items": orden.items,
+        "estado": orden.estado,
+        "motivo_anulacion": orden.motivo_anulacion,
+        "anulado_por_id_usuario": orden.anulado_por_id_usuario,
+        "anulado_fecha": orden.anulado_fecha.isoformat() if orden.anulado_fecha else None,
+        "creado_por_id_usuario": orden.creado_por_id_usuario,
+        "created_at": orden.created_at.isoformat() if orden.created_at else None,
+        "updated_at": orden.updated_at.isoformat() if orden.updated_at else None,
+        "id_transaccion": orden.transaccion.id_transaccion if orden.transaccion else None,
+        **contexto,
+    }
 
 
 def _origenes_transitivos(db: Session, id_destino: int) -> list[int]:
@@ -210,48 +258,56 @@ def _estado_financiero(db: Session, detalle, dpm_list: list, precio: float, matr
     }
 
 
-def _planificar_cobro(db: Session, detalle, dpm_list: list, precio: float, target_dpm_id, monto_total: float, matricula: float = 0.0):
-    """Reparte el monto: la matrícula siempre se cobra primero, luego las cuotas desde el target.
-    Rechaza con 400 si el monto excede el saldo pendiente cobrable."""
+def _plan_exacto(db: Session, detalle, dpm_list: list, precio: float, matricula: float, cubre_matricula: bool, cantidad_modulos: int):
+    """Plan exacto de una orden/pago: matrícula completa (si pendiente y pedida) +
+    N cuotas íntegras y contiguas desde la primera pendiente. Sin montos libres
+    ni cuotas parciales (descuento/beca del estado financiero)."""
     est = _estado_financiero(db, detalle, dpm_list, precio, matricula)
 
     resto_mat = max(0.0, est["matricula_esperado"] - est["matricula_pagado"])
-    if target_dpm_id is None:
-        start = 0
-    else:
-        start = next(
-            (i for i, d in enumerate(dpm_list) if d.id_detalle_programa_modulo == target_dpm_id),
-            0,
+
+    cuotas_pendientes: list[tuple] = []
+    for dpm in dpm_list:
+        resto = max(
+            0.0,
+            est["expecteds"].get(dpm.id_detalle_programa_modulo, 0.0)
+            - est["pagado_por_dpm"].get(dpm.id_detalle_programa_modulo, 0.0),
         )
-
-    saldo_cobrable = resto_mat + sum(
-        max(0.0, est["expecteds"].get(d.id_detalle_programa_modulo, 0.0) - est["pagado_por_dpm"].get(d.id_detalle_programa_modulo, 0.0))
-        for d in dpm_list[start:]
-    )
-    if monto_total > saldo_cobrable + 0.005:
-        raise HTTPException(
-            status_code=400,
-            detail=f"El monto excede el saldo pendiente ({round(saldo_cobrable, 2)} Bs)",
-        )
-
-    asignaciones: list[tuple] = []
-    restante = monto_total
-    if restante > 0 and resto_mat > 0:
-        m = min(resto_mat, restante)
-        asignaciones.append((None, m))
-        restante -= m
-
-    for i in range(start, len(dpm_list)):
-        if restante <= 0:
-            break
-        dpm = dpm_list[i]
-        resto = max(0.0, est["expecteds"].get(dpm.id_detalle_programa_modulo, 0.0) - est["pagado_por_dpm"].get(dpm.id_detalle_programa_modulo, 0.0))
         if resto <= 0:
             continue
-        m = min(resto, restante)
-        asignaciones.append((dpm, m))
-        restante -= m
-    return asignaciones
+        cuotas_pendientes.append((dpm, resto))
+
+    if resto_mat > 0 and not cubre_matricula and cantidad_modulos > 0:
+        raise HTTPException(
+            status_code=400,
+            detail="La matrícula pendiente debe incluirse en la orden",
+        )
+
+    if cantidad_modulos > len(cuotas_pendientes):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Solo hay {len(cuotas_pendientes)} cuota(s) pendiente(s) por cobrar",
+        )
+
+    for dpm, resto in cuotas_pendientes[:cantidad_modulos]:
+        esperado = est["expecteds"].get(dpm.id_detalle_programa_modulo, 0.0)
+        if abs(resto - esperado) > 0.005:
+            raise HTTPException(
+                status_code=400,
+                detail=f"La cuota {dpm.orden} tiene un pago parcial previo; debe completarse en su totalidad",
+            )
+
+    asignaciones: list[tuple] = []
+    if cubre_matricula and resto_mat > 0:
+        asignaciones.append((None, resto_mat))
+    for dpm, resto in cuotas_pendientes[:cantidad_modulos]:
+        asignaciones.append((dpm, resto))
+
+    if not asignaciones:
+        raise HTTPException(status_code=400, detail="La orden no cubre ningún concepto")
+
+    monto_total = round(sum(m for _, m in asignaciones), 2)
+    return asignaciones, monto_total
 
 
 def _serializar_pago(p: Pago) -> dict:
@@ -308,6 +364,16 @@ def pagos_por_edicion(
         DetalleProgramaAlumno.id_programa_version_edicion == id_edicion
     ).order_by(DetalleProgramaAlumno.id_detalle_programa_alumno).all()
 
+    dpa_ids = [d.id_detalle_programa_alumno for d in detalles]
+    ordenes_emitidas: dict[int, dict] = {}
+    if dpa_ids:
+        activas = db.query(OrdenPago).filter(
+            OrdenPago.id_detalle_programa_alumno.in_(dpa_ids),
+            OrdenPago.estado == "emitida",
+        ).all()
+        for o in activas:
+            ordenes_emitidas[o.id_detalle_programa_alumno] = _serializar_orden(db, o)
+
     resultado = []
     for detalle in detalles:
         alumno = db.query(Alumno).filter(Alumno.id_alumno == detalle.id_alumno).first()
@@ -337,6 +403,7 @@ def pagos_por_edicion(
 
         resultado.append({
             "id_detalle_programa_alumno": detalle.id_detalle_programa_alumno,
+            "orden_activa": ordenes_emitidas.get(detalle.id_detalle_programa_alumno),
             "alumno": {
                 "id_alumno": alumno.id_alumno if alumno else None,
                 "nombre": alumno.nombre if alumno else "N/A",
@@ -410,6 +477,8 @@ def transcript_pagos(
             if t.id_transaccion not in {x["id_transaccion"] for x in transacciones}:
                 transacciones.append({
                     "id_transaccion": t.id_transaccion,
+                    "id_orden_pago": t.id_orden_pago,
+                    "orden_numero": t.orden_pago.numero if t.orden_pago else None,
                     "fecha_pago": str(t.fecha_pago),
                     "monto_total": float(t.monto_total),
                     "comprobante": t.comprobante,
@@ -478,41 +547,4 @@ def transcript_pagos(
         })
 
     return {"id_alumno": id_alumno, "inscripciones": inscripciones}
-
-
-@router.post("/preview", status_code=200)
-def preview_cobro(data: TransaccionPagoCreate, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("pagos.registrar"))):
-    detalle = db.query(DetalleProgramaAlumno).filter(
-        DetalleProgramaAlumno.id_detalle_programa_alumno == data.id_detalle_programa_alumno
-    ).first()
-    if not detalle:
-        raise HTTPException(status_code=404, detail="Inscripción no encontrada")
-
-    monto_total = float(data.monto)
-    if monto_total <= 0:
-        raise HTTPException(status_code=400, detail="El monto debe ser mayor a 0")
-
-    dpm_list = db.query(DetalleProgramaModulo).filter(
-        DetalleProgramaModulo.id_programa_version_edicion == detalle.id_programa_version_edicion
-    ).order_by(DetalleProgramaModulo.orden).all()
-
-    edicion = db.query(ProgramaVersionEdicion).filter(
-        ProgramaVersionEdicion.id_programa_version_edicion == detalle.id_programa_version_edicion
-    ).first()
-    precio = float(edicion.precio or 0) if edicion else 0.0
-    matricula = float(edicion.matricula or 0) if edicion else 0.0
-
-    plan = _planificar_cobro(db, detalle, dpm_list, precio, data.id_detalle_programa_modulo, monto_total, matricula)
-
-    return {
-        "asignaciones": [
-            {
-                "tipo": "matricula" if dpm is None else "cuota",
-                "id_detalle_programa_modulo": dpm.id_detalle_programa_modulo if dpm else None,
-                "concepto": "Matrícula" if dpm is None else f"Cuota {dpm.orden}",
-                "monto": round(m, 2),
-            }
-            for dpm, m in plan
-        ]
-    }
 
