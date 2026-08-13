@@ -133,3 +133,10 @@ class ProgramaVersionEdicionResponse(ProgramaVersionEdicionBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+class PaginatedProgramaVersionEdicionResponse(BaseModel):
+    items: list[ProgramaVersionEdicionResponse]
+    total: int
+    page: int
+    per_page: int
+    pages: int

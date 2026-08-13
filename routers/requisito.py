@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
-from dependencies import get_current_user, require_permiso
+from dependencies import require_permiso
 from models.requisito import Requisito
 from schemas.requisito import RequisitoCreate, RequisitoUpdate, RequisitoResponse
 from schemas.auth import UserResponse

@@ -12,7 +12,6 @@ from models.modulo import Modulo
 from models.programa_version import ProgramaVersion
 from models.programa_version_edicion import ProgramaVersionEdicion
 from schemas.detalle_programa_modulo import DetalleProgramaModuloCreate, DetalleProgramaModuloUpdate, DetalleProgramaModuloResponse, ReordenarRequest
-from schemas.contrataciones_docente import ContratacionDocenteResponse
 from schemas.auth import UserResponse
 from routers.edition_state import actualizar_estado_edicion
 

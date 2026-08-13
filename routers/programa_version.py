@@ -1,13 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
+import math
 from database import get_db
 from dependencies import get_current_user, require_permiso
 from models.programa import Programa
 from models.programa_version import ProgramaVersion
 from models.programa_version_edicion import ProgramaVersionEdicion
-from schemas.programa_version import ProgramaVersionCreate, ProgramaVersionUpdate, ProgramaVersionResponse
+from schemas.programa_version import (
+    ProgramaVersionCreate,
+    ProgramaVersionUpdate,
+    ProgramaVersionResponse,
+    PaginatedProgramaVersionResponse,
+)
 from schemas.auth import UserResponse
 from .utils import guardar_foto_base64, eliminar_foto
 
@@ -72,6 +78,26 @@ def listar(db: Session = Depends(get_db), current_user: UserResponse = Depends(r
     versiones = db.query(ProgramaVersion).options(joinedload(ProgramaVersion.programa)).all()
     _cargar_counts_masivo(versiones, db)
     return versiones
+
+@router.get("/paginadas/", response_model=PaginatedProgramaVersionResponse)
+def listar_paginadas(
+    programa_id: int | None = Query(None, ge=1),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(require_permiso("programas.ver")),
+):
+    query = db.query(ProgramaVersion).options(joinedload(ProgramaVersion.programa))
+    if programa_id:
+        query = query.filter(ProgramaVersion.id_programa == programa_id)
+    total = query.count()
+    pages = math.ceil(total / per_page) if total else 0
+    offset = (page - 1) * per_page
+    versiones = query.order_by(ProgramaVersion.version.asc()).offset(offset).limit(per_page).all()
+    _cargar_counts_masivo(versiones, db)
+    return PaginatedProgramaVersionResponse(
+        items=versiones, total=total, page=page, per_page=per_page, pages=pages
+    )
 
 @router.get("/{id}", response_model=ProgramaVersionResponse)
 def obtener(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("programas.ver"))):

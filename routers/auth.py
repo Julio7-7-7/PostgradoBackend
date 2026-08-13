@@ -9,7 +9,7 @@ from models.docente import Docente
 from models.administrativo import Administrativo
 from schemas.auth import (
     LoginRequest, SelectRolRequest, TokenResponse, UserResponse,
-    MeResponse, LoginStep1Response, RolInfo, RegistroRequest,
+    MeResponse, LoginStep1Response, RegistroRequest,
     CambiarPasswordRequest,
 )
 from dependencies import (
@@ -18,7 +18,6 @@ from dependencies import (
 )
 from rate_limiter import check_rate_limit, record_failed_attempt, clear_attempts
 from passlib.context import CryptContext
-from fastapi import Request as Req
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -62,26 +61,31 @@ def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/registro", response_model=TokenResponse, status_code=201)
-def registro(data: RegistroRequest, db: Session = Depends(get_db)):
+def registro(data: RegistroRequest, request: Request, db: Session = Depends(get_db)):
+    check_rate_limit(request)
     if data.honeypot:
+        record_failed_attempt(request)
         raise HTTPException(status_code=400, detail="Registro inválido")
 
     email_normalized = data.email.strip().lower()
 
     existing = db.query(Usuario).filter(Usuario.email == email_normalized).first()
     if existing:
+        record_failed_attempt(request)
         raise HTTPException(status_code=400, detail="Ya existe una cuenta con ese correo electrónico")
 
     ci_duplicada = None
     if data.ci:
         ci_duplicada = db.query(Alumno).filter(Alumno.ci == data.ci.strip()).first()
     if ci_duplicada:
+        record_failed_attempt(request)
         raise HTTPException(status_code=400, detail="Ya existe un alumno registrado con esa CI")
 
     pasaporte_duplicado = None
     if data.pasaporte:
         pasaporte_duplicado = db.query(Alumno).filter(Alumno.pasaporte == data.pasaporte.strip().upper()).first()
     if pasaporte_duplicado:
+        record_failed_attempt(request)
         raise HTTPException(status_code=400, detail="Ya existe un alumno registrado con ese pasaporte")
 
     rol_alumno = db.query(Rol).filter(Rol.nombre == "alumno").first()
@@ -140,13 +144,15 @@ def registro(data: RegistroRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/seleccionar-rol", response_model=TokenResponse)
-def seleccionar_rol(data: SelectRolRequest, db: Session = Depends(get_db)):
+def seleccionar_rol(data: SelectRolRequest, request: Request, db: Session = Depends(get_db)):
+    check_rate_limit(request)
     usuario_rol = db.query(UsuarioRol).filter(
         UsuarioRol.id_usuario == data.id_usuario,
         UsuarioRol.id_rol == data.id_rol,
     ).first()
 
     if not usuario_rol:
+        record_failed_attempt(request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Rol no válido para este usuario",
@@ -158,6 +164,7 @@ def seleccionar_rol(data: SelectRolRequest, db: Session = Depends(get_db)):
     ).first()
 
     if not usuario:
+        record_failed_attempt(request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario no encontrado o inactivo",

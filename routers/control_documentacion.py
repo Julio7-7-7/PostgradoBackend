@@ -8,9 +8,6 @@ from dependencies import get_current_user, require_permiso
 from models.control_documentacion import ControlDocumentacion
 from models.detalle_programa_alumno import DetalleProgramaAlumno
 from models.alumno import Alumno
-from models.usuario import Usuario
-from models.usuario_rol import UsuarioRol
-from models.requisito import Requisito
 from schemas.control_documentacion import ControlDocumentacionCreate, ControlDocumentacionUpdate, ControlDocumentacionResponse, PaginatedControlDocumentacionResponse
 from schemas.auth import UserResponse
 from routers.utils import guardar_documento_base64, eliminar_foto, es_alumno_actual
@@ -192,15 +189,3 @@ def editar(id: int, data: ControlDocumentacionUpdate, db: Session = Depends(get_
 
     return control
 
-
-@router.delete("/{id}", status_code=204)
-def eliminar(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("documentos.revisar"))):
-    control = db.query(ControlDocumentacion).filter(
-        ControlDocumentacion.id_control_documentacion == id
-    ).first()
-    if not control:
-        raise HTTPException(status_code=404, detail="No encontrado")
-    if control.url_documento:
-        eliminar_foto(control.url_documento)
-    db.delete(control)
-    db.commit()

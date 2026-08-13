@@ -21,6 +21,7 @@ from routers import permisos
 from routers import usuarios
 from routers import pago
 from routers import transaccion_pago
+from routers import orden_pago
 from routers import nota
 from routers import dashboard
 from routers import solicitud
@@ -50,6 +51,7 @@ all_routers = [
     usuarios.router,
     pago.router,
     transaccion_pago.router,
+    orden_pago.router,
     nota.router,
     dashboard.router,
     solicitud.router,

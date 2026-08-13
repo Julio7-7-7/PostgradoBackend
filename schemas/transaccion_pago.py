@@ -1,16 +1,7 @@
-from datetime import datetime, date
-from decimal import Decimal
+from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from schemas.pago import PagoItemResponse
-
-
-class TransaccionPagoCreate(BaseModel):
-    id_detalle_programa_alumno: int
-    id_detalle_programa_modulo: int | None = None
-    monto: Decimal
-    fecha_pago: date
-    comprobante: str | None = None
 
 
 class TransaccionPagoBaja(BaseModel):
@@ -20,7 +11,9 @@ class TransaccionPagoBaja(BaseModel):
 class TransaccionPagoResponse(BaseModel):
     id_transaccion: int
     id_detalle_programa_alumno: int
-    monto_total: Decimal
+    id_orden_pago: int | None
+    orden_numero: str | None = None
+    monto_total: float
     fecha_pago: date
     comprobante: str | None
     estado: str

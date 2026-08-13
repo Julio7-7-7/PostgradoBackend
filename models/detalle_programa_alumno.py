@@ -35,6 +35,7 @@ class DetalleProgramaAlumno(Base):
     )
     control_documentacion = relationship("ControlDocumentacion", back_populates="detalle_programa_alumno", cascade="all, delete-orphan")
     transacciones_pago = relationship("TransaccionPago", back_populates="detalle_programa_alumno")
+    ordenes_pago = relationship("OrdenPago", back_populates="detalle_programa_alumno")
     notas = relationship("Nota", back_populates="detalle_programa_alumno")
     historial_origen = relationship(
         "HistorialInscripcion",

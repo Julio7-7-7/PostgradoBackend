@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 from datetime import date, datetime
+import math
 from database import get_db
-from dependencies import get_current_user, require_permiso
+from dependencies import require_permiso
 from models.programa_version_edicion import ProgramaVersionEdicion
 from models.programa_version import ProgramaVersion
 from models.programa import Programa
@@ -14,9 +15,13 @@ from models.alumno import Alumno
 from models.control_documentacion import ControlDocumentacion
 from models.requisito import Requisito
 from models.modalidad_academica import ModalidadAcademica
-from schemas.programa_version_edicion import ProgramaVersionEdicionCreate, ProgramaVersionEdicionUpdate, ProgramaVersionEdicionResponse
+from schemas.programa_version_edicion import (
+    ProgramaVersionEdicionCreate,
+    ProgramaVersionEdicionUpdate,
+    ProgramaVersionEdicionResponse,
+    PaginatedProgramaVersionEdicionResponse,
+)
 from schemas.auth import UserResponse
-from routers.edition_state import actualizar_estado_edicion
 
 router = APIRouter(
     prefix="/programa-version-edicion",
@@ -206,6 +211,28 @@ def listar(programa_version_id: int | None = None, activas: bool | None = None, 
         query = query.filter(ProgramaVersionEdicion.estado.in_(["programado", "en_curso", "reprogramado"]))
     query = query.order_by(ProgramaVersionEdicion.fecha_inicio.asc().nullslast())
     return query.all()
+
+@router.get("/paginadas/", response_model=PaginatedProgramaVersionEdicionResponse)
+def listar_paginadas(
+    programa_version_id: int | None = Query(None, ge=1),
+    activas: bool | None = None,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(10, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(require_permiso("ediciones.ver")),
+):
+    query = query_base(db)
+    if programa_version_id:
+        query = query.filter(ProgramaVersionEdicion.id_programa_version == programa_version_id)
+    if activas:
+        query = query.filter(ProgramaVersionEdicion.estado.in_(["programado", "en_curso", "reprogramado"]))
+    total = query.count()
+    pages = math.ceil(total / per_page) if total else 0
+    offset = (page - 1) * per_page
+    items = query.order_by(ProgramaVersionEdicion.fecha_inicio.desc().nullslast()).offset(offset).limit(per_page).all()
+    return PaginatedProgramaVersionEdicionResponse(
+        items=items, total=total, page=page, per_page=per_page, pages=pages
+    )
 
 @router.get("/activas", response_model=list[ProgramaVersionEdicionResponse])
 def listar_activas(db: Session = Depends(get_db)):

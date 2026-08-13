@@ -25,3 +25,10 @@ class ProgramaVersionResponse(ProgramaVersionBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+class PaginatedProgramaVersionResponse(BaseModel):
+    items: list[ProgramaVersionResponse]
+    total: int
+    page: int
+    per_page: int
+    pages: int

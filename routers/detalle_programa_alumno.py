@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from datetime import date
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func as sql_func
 import math
 from database import get_db
 from dependencies import get_current_user, require_permiso
@@ -598,25 +597,6 @@ def retirar(id: int, db: Session = Depends(get_db), current_user: UserResponse =
             DetalleProgramaAlumno.id_detalle_programa_alumno == id
         )
     ).first()
-
-
-@router.delete("/{id}", response_model=DetalleProgramaAlumnoResponse)
-def eliminar(id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("alumnos.editar"))):
-    detalle = db.query(DetalleProgramaAlumno).filter(
-        DetalleProgramaAlumno.id_detalle_programa_alumno == id
-    ).first()
-    if not detalle:
-        raise HTTPException(status_code=404, detail="No encontrado")
-    _validar_transicion_estado(detalle.estado, "retirado")
-    detalle.estado = "retirado"
-    _registrar_retiro(db, id)
-    db.commit()
-    return _cargar_con_relations(
-        db.query(DetalleProgramaAlumno).filter(
-            DetalleProgramaAlumno.id_detalle_programa_alumno == id
-        )
-    ).first()
-
 
 
 @router.get("/historial-movimientos/{id_alumno}")

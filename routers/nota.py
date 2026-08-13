@@ -15,7 +15,7 @@ from models.modalidad_academica import ModalidadAcademica
 from models.historial_inscripcion import HistorialInscripcion
 from schemas.nota import (
     NotaCreate, NotaUpdate, NotaResponse,
-    NotaEdicionResponse, NotaDocenteResponse, NotaModuloResponse,
+    NotaDocenteResponse, NotaModuloResponse,
     ModuloTranscriptItem, InscripcionTranscriptItem, EdicionInfoItem, TranscriptResponse,
     NotasEdicionResponse,
 )
@@ -568,17 +568,6 @@ def transcript_alumno(
         ModalidadAcademica.id_modalidad_academica.in_(modalidad_ids)
     ).all() if modalidad_ids else []
     mod_map = {m.id_modalidad_academica: m for m in modalidades}
-
-    all_dpm_ids = set()
-    for ins in inscripciones:
-        for n in nota_map.get(ins.id_detalle_programa_alumno, []):
-            all_dpm_ids.add(n.id_detalle_programa_modulo)
-
-    dpm_list = db.query(DetalleProgramaModulo).filter(
-        DetalleProgramaModulo.id_detalle_programa_modulo.in_(all_dpm_ids)
-    ).all() if all_dpm_ids else []
-
-    dpm_map = {dpm.id_detalle_programa_modulo: dpm for dpm in dpm_list}
 
     todos_dpm = db.query(DetalleProgramaModulo).filter(
         DetalleProgramaModulo.id_programa_version_edicion.in_(pve_ids)
