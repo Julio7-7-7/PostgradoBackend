@@ -1,6 +1,6 @@
 import math
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -320,6 +320,68 @@ def _serializar_pago(p: Pago) -> dict:
     }
 
 
+def _serializar_fila(
+    db: Session,
+    detalle: DetalleProgramaAlumno,
+    dpm_list: list,
+    modulos: list[dict],
+    precio: float,
+    matricula: float,
+    ordenes_emitidas: dict[int, dict],
+) -> dict:
+    """Fila de la matriz de pagos para un DPA (reusado por por-edicion y buscar)."""
+    alumno = db.query(Alumno).filter(Alumno.id_alumno == detalle.id_alumno).first()
+    est = _estado_financiero(db, detalle, dpm_list, precio, matricula)
+
+    total_esperado = round(est["matricula_esperado"] + est["total_esperado_cuotas"], 2)
+    pct_total = round(min(100.0, est["total_pagado"] / total_esperado * 100), 1) if total_esperado else 0.0
+
+    cuotas = []
+    for dpm in dpm_list:
+        esperado = est["expecteds"].get(dpm.id_detalle_programa_modulo, 0.0)
+        pagado = round(est["pagado_por_dpm"].get(dpm.id_detalle_programa_modulo, 0.0), 2)
+        cuotas.append({
+            "id_detalle_programa_modulo": dpm.id_detalle_programa_modulo,
+            "id_modulo": dpm.id_modulo,
+            "orden": dpm.orden,
+            "nombre": next((m["nombre"] for m in modulos if m["id_detalle_programa_modulo"] == dpm.id_detalle_programa_modulo), ""),
+            "sigla": next((m["sigla"] for m in modulos if m["id_detalle_programa_modulo"] == dpm.id_detalle_programa_modulo), ""),
+            "esperado": esperado,
+            "pagado": pagado,
+            "pct": round(min(100.0, pagado / esperado * 100), 1) if esperado else 0.0,
+            "pagos": est["cuota_pagos"].get(dpm.id_detalle_programa_modulo, []),
+        })
+
+    return {
+        "id_detalle_programa_alumno": detalle.id_detalle_programa_alumno,
+        "orden_activa": ordenes_emitidas.get(detalle.id_detalle_programa_alumno),
+        "alumno": {
+            "id_alumno": alumno.id_alumno if alumno else None,
+            "nombre": alumno.nombre if alumno else "N/A",
+            "apellido": alumno.apellido if alumno else "N/A",
+            "ci": alumno.ci if alumno else None,
+        } if alumno else None,
+        "estado": detalle.estado,
+        "descuento_aplicado": _descuento_porcentaje(detalle),
+        "beca_activa": est["beca_activa"],
+        "beca_motivo": est["beca_motivo"],
+        "matricula": {
+            "esperado": est["matricula_esperado"],
+            "pagado": round(est["matricula_pagado"], 2),
+            "pct": round(min(100.0, est["matricula_pagado"] / est["matricula_esperado"] * 100), 1) if est["matricula_esperado"] else 0.0,
+            "pagos": est["matricula_pagos"],
+        },
+        "cuotas": cuotas,
+        "otros": {
+            "pagado": round(est["otros_pagado"], 2),
+            "pagos": est["otros_pagos"],
+        },
+        "total_esperado": total_esperado,
+        "total_pagado": est["total_pagado"],
+        "pct_total": pct_total,
+    }
+
+
 def _nombre_usuario(db: Session, id_usuario: int | None) -> str | None:
     if not id_usuario:
         return None
@@ -376,59 +438,7 @@ def pagos_por_edicion(
 
     resultado = []
     for detalle in detalles:
-        alumno = db.query(Alumno).filter(Alumno.id_alumno == detalle.id_alumno).first()
-        est = _estado_financiero(db, detalle, dpm_list, precio, matricula)
-
-        total_esperado = round(est["matricula_esperado"] + est["total_esperado_cuotas"], 2)
-        pct_total = round(min(100.0, est["total_pagado"] / total_esperado * 100), 1) if total_esperado else 0.0
-
-        cuotas = []
-        for dpm in dpm_list:
-            esperado = est["expecteds"].get(dpm.id_detalle_programa_modulo, 0.0)
-            pagado = round(est["pagado_por_dpm"].get(dpm.id_detalle_programa_modulo, 0.0), 2)
-            cuotas.append({
-                "id_detalle_programa_modulo": dpm.id_detalle_programa_modulo,
-                "id_modulo": dpm.id_modulo,
-                "orden": dpm.orden,
-                "nombre": next((m["nombre"] for m in modulos if m["id_detalle_programa_modulo"] == dpm.id_detalle_programa_modulo), ""),
-                "sigla": next((m["sigla"] for m in modulos if m["id_detalle_programa_modulo"] == dpm.id_detalle_programa_modulo), ""),
-                "esperado": esperado,
-                "pagado": pagado,
-                "pct": round(min(100.0, pagado / esperado * 100), 1) if esperado else 0.0,
-                "pagos": est["cuota_pagos"].get(dpm.id_detalle_programa_modulo, []),
-            })
-
-        matricula_pagado = round(est["matricula_pagado"], 2)
-        matricula_esperado = est["matricula_esperado"]
-
-        resultado.append({
-            "id_detalle_programa_alumno": detalle.id_detalle_programa_alumno,
-            "orden_activa": ordenes_emitidas.get(detalle.id_detalle_programa_alumno),
-            "alumno": {
-                "id_alumno": alumno.id_alumno if alumno else None,
-                "nombre": alumno.nombre if alumno else "N/A",
-                "apellido": alumno.apellido if alumno else "N/A",
-                "ci": alumno.ci if alumno else None,
-            } if alumno else None,
-            "estado": detalle.estado,
-            "descuento_aplicado": _descuento_porcentaje(detalle),
-            "beca_activa": est["beca_activa"],
-            "beca_motivo": est["beca_motivo"],
-            "matricula": {
-                "esperado": matricula_esperado,
-                "pagado": matricula_pagado,
-                "pct": round(min(100.0, matricula_pagado / matricula_esperado * 100), 1) if matricula_esperado else 0.0,
-                "pagos": est["matricula_pagos"],
-            },
-            "cuotas": cuotas,
-            "otros": {
-                "pagado": round(est["otros_pagado"], 2),
-                "pagos": est["otros_pagos"],
-            },
-            "total_esperado": total_esperado,
-            "total_pagado": est["total_pagado"],
-            "pct_total": pct_total,
-        })
+        resultado.append(_serializar_fila(db, detalle, dpm_list, modulos, precio, matricula, ordenes_emitidas))
 
     return {
         "id_programa_version_edicion": id_edicion,
@@ -437,6 +447,106 @@ def pagos_por_edicion(
         "modulos": modulos,
         "alumnos": resultado,
     }
+
+
+@router.get("/buscar")
+def buscar_alumnos(
+    q: str = Query("", max_length=100),
+    limit: int = Query(20, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(require_permiso("pagos.ver"))
+):
+    """Búsqueda global por apellido/nombre/CI sobre ediciones activas. Cada hit
+    trae la fila completa de la matriz + el contexto de su edición para abrir
+    el dialog de orden directamente."""
+    if not q or len(q.strip()) < 2:
+        return {"items": []}
+
+    termino = q.strip()
+    like = f"%{termino}%"
+    detalles = (
+        db.query(DetalleProgramaAlumno)
+        .join(Alumno, DetalleProgramaAlumno.id_alumno == Alumno.id_alumno)
+        .join(ProgramaVersionEdicion, DetalleProgramaAlumno.id_programa_version_edicion == ProgramaVersionEdicion.id_programa_version_edicion)
+        .filter(ProgramaVersionEdicion.estado != "finalizado")
+        .filter(DetalleProgramaAlumno.estado != "retirado")
+        .filter(
+            Alumno.nombre.ilike(like)
+            | Alumno.apellido.ilike(like)
+            | Alumno.ci.ilike(like)
+        )
+        .order_by(Alumno.apellido, Alumno.nombre)
+        .limit(limit)
+        .all()
+    )
+
+    if not detalles:
+        return {"items": []}
+
+    pve_ids = {d.id_programa_version_edicion for d in detalles}
+    ediciones = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion.in_(pve_ids)
+    ).all()
+    edicion_por_id = {e.id_programa_version_edicion: e for e in ediciones}
+
+    contextos: dict[int, dict] = {}
+    modulos_por_edicion: dict[int, tuple[list, list]] = {}
+    for e in ediciones:
+        pv = e.programa_version
+        programa = pv.programa if pv else None
+        contextos[e.id_programa_version_edicion] = {
+            "id_programa_version_edicion": e.id_programa_version_edicion,
+            "programa": programa.nombre_programa if programa else "Programa",
+            "tipo_programa": programa.tipo_programa.nombre if programa and programa.tipo_programa else "",
+            "edicion": e.edicion,
+            "anio": e.anio,
+            "semestre": e.semestre,
+            "modalidad": e.modalidad,
+            "precio": float(e.precio or 0),
+            "matricula": float(e.matricula or 0),
+        }
+        dpm_list = db.query(DetalleProgramaModulo).filter(
+            DetalleProgramaModulo.id_programa_version_edicion == e.id_programa_version_edicion
+        ).order_by(DetalleProgramaModulo.orden).all()
+        modulos = []
+        for dpm in dpm_list:
+            mod = db.query(Modulo).filter(Modulo.id_modulo == dpm.id_modulo).first()
+            modulos.append({
+                "id_detalle_programa_modulo": dpm.id_detalle_programa_modulo,
+                "id_modulo": dpm.id_modulo,
+                "nombre": mod.nombre_modulo if mod else f"Módulo #{dpm.id_modulo}",
+                "sigla": mod.sigla if mod else "",
+                "orden": dpm.orden,
+            })
+        modulos_por_edicion[e.id_programa_version_edicion] = (dpm_list, modulos)
+
+    dpa_ids = [d.id_detalle_programa_alumno for d in detalles]
+    activas = db.query(OrdenPago).filter(
+        OrdenPago.id_detalle_programa_alumno.in_(dpa_ids),
+        OrdenPago.estado == "emitida",
+    ).all()
+    ordenes_emitidas = {o.id_detalle_programa_alumno: _serializar_orden(db, o) for o in activas}
+
+    items = []
+    for detalle in detalles:
+        ctx = contextos[detalle.id_programa_version_edicion]
+        dpm_list, modulos = modulos_por_edicion[detalle.id_programa_version_edicion]
+        fila = _serializar_fila(db, detalle, dpm_list, modulos, ctx["precio"], ctx["matricula"], ordenes_emitidas)
+        items.append({
+            **fila,
+            "id_programa_version_edicion": ctx["id_programa_version_edicion"],
+            "programa": ctx["programa"],
+            "tipo_programa": ctx["tipo_programa"],
+            "edicion": ctx["edicion"],
+            "anio": ctx["anio"],
+            "semestre": ctx["semestre"],
+            "modalidad": ctx["modalidad"],
+            "precio": ctx["precio"],
+            "matricula_precio": ctx["matricula"],
+            "modulos": modulos,
+        })
+
+    return {"items": items}
 
 
 @router.get("/transcript/{id_alumno}")
