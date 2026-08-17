@@ -26,6 +26,7 @@ from routers import nota
 from routers import dashboard
 from routers import solicitud
 from routers import solicitud_requisito
+from routers import persona
 
 all_routers = [
     tipo_programa.router,
@@ -56,4 +57,5 @@ all_routers = [
     dashboard.router,
     solicitud.router,
     solicitud_requisito.router,
+    persona.router,
 ]

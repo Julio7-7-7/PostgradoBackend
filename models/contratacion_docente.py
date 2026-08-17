@@ -38,19 +38,3 @@ class ContratacionDocente(Base):
         back_populates="contratacion",
         cascade="all, delete-orphan",
     )
-
-    @property
-    def id_programa(self) -> int:
-        return self.detalle_modulo.programa_version_edicion.programa_version.id_programa
-
-    @property
-    def programa_nombre(self) -> str:
-        return self.detalle_modulo.programa_version_edicion.programa_version.programa.nombre_programa
-
-    @property
-    def modulo_sigla(self) -> str:
-        return self.detalle_modulo.modulo.sigla
-
-    @property
-    def modulo_nombre(self) -> str:
-        return self.detalle_modulo.modulo.nombre_modulo
