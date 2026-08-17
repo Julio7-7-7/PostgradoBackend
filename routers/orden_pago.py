@@ -69,15 +69,16 @@ def preview_orden(data: OrdenPagoEmitir, db: Session = Depends(get_db), current_
 
 
 @router.post("/", status_code=201, response_model=OrdenPagoResponse)
-def emitir_orden(data: OrdenPagoEmitir, db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("pagos.registrar"))):
+def emitir_orden(data: OrdenPagoEmitir, db: Session = Depends(get_db), current_user: UserResponse = Depends(get_current_user)):
     detalle = db.query(DetalleProgramaAlumno).filter(
         DetalleProgramaAlumno.id_detalle_programa_alumno == data.id_detalle_programa_alumno
     ).first()
     if not detalle:
         raise HTTPException(status_code=404, detail="Inscripción no encontrada")
 
-    if es_alumno_actual(current_user, detalle.id_alumno, db):
-        raise HTTPException(status_code=403, detail="No podés emitir órdenes de pago para tu propia inscripción")
+    es_propia = es_alumno_actual(current_user, detalle.id_alumno, db)
+    if not es_propia and not any(p.codigo == "pagos.registrar" for p in current_user.permisos):
+        raise HTTPException(status_code=403, detail="No tenés permiso para emitir órdenes de pago")
 
     dpm_list = db.query(DetalleProgramaModulo).filter(
         DetalleProgramaModulo.id_programa_version_edicion == detalle.id_programa_version_edicion
@@ -153,6 +154,25 @@ def ordenes_por_dpa(
     db: Session = Depends(get_db),
     current_user: UserResponse = Depends(require_permiso("pagos.ver"))
 ):
+    ordenes = db.query(OrdenPago).filter(
+        OrdenPago.id_detalle_programa_alumno == id_dpa
+    ).order_by(OrdenPago.created_at.desc()).all()
+    return [_serializar_orden(db, o) for o in ordenes]
+
+
+@router.get("/mis-ordenes/{id_dpa}", response_model=list[OrdenPagoResponse])
+def mis_ordenes_por_dpa(
+    id_dpa: int,
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user)
+):
+    detalle = db.query(DetalleProgramaAlumno).filter(
+        DetalleProgramaAlumno.id_detalle_programa_alumno == id_dpa
+    ).first()
+    if not detalle:
+        raise HTTPException(status_code=404, detail="Inscripción no encontrada")
+    if not es_alumno_actual(current_user, detalle.id_alumno, db):
+        raise HTTPException(status_code=403, detail="No tenés acceso a esta inscripción")
     ordenes = db.query(OrdenPago).filter(
         OrdenPago.id_detalle_programa_alumno == id_dpa
     ).order_by(OrdenPago.created_at.desc()).all()
