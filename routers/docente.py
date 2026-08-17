@@ -50,6 +50,9 @@ def crear(data: DocenteCreate, db: Session = Depends(get_db), current_user: User
         db.add(usuario)
         db.flush()
         db.add(UsuarioRol(id_usuario=usuario.id_usuario, id_rol=rol_docente.id_rol))
+        rol_alumno = db.query(Rol).filter(Rol.nombre == "alumno").first()
+        if rol_alumno:
+            db.add(UsuarioRol(id_usuario=usuario.id_usuario, id_rol=rol_alumno.id_rol))
         nuevo.id_usuario = usuario.id_usuario
         usuario_creado = True
 

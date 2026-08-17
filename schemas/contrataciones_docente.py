@@ -38,10 +38,10 @@ class ContratacionDocenteResponse(ContratacionDocenteBase):
     fecha_fin: date | None = None
     estado: ContratacionEstadoEnum
     docente: DocenteResponse
-    id_programa: int
-    programa_nombre: str
-    modulo_sigla: str
-    modulo_nombre: str
+    id_programa: int = 0
+    programa_nombre: str = ""
+    modulo_sigla: str = ""
+    modulo_nombre: str = ""
     created_at: datetime
     updated_at: datetime
 
@@ -49,10 +49,22 @@ class ContratacionDocenteResponse(ContratacionDocenteBase):
 
     @model_validator(mode='before')
     @classmethod
-    def fill_dates_from_detalle(cls, data):
+    def fill_derived_fields(cls, data):
         if hasattr(data, 'detalle_modulo') and data.detalle_modulo is not None:
             if data.fecha_inicio is None and data.detalle_modulo.fecha_inicio:
                 data.fecha_inicio = data.detalle_modulo.fecha_inicio
             if data.fecha_fin is None and data.detalle_modulo.fecha_fin:
                 data.fecha_fin = data.detalle_modulo.fecha_fin
+            modulo = getattr(data.detalle_modulo, 'modulo', None)
+            if modulo:
+                object.__setattr__(data, 'modulo_sigla', modulo.sigla or "")
+                object.__setattr__(data, 'modulo_nombre', modulo.nombre_modulo or "")
+            pve = getattr(data.detalle_modulo, 'programa_version_edicion', None)
+            if pve:
+                pv = getattr(pve, 'programa_version', None)
+                if pv:
+                    object.__setattr__(data, 'id_programa', pv.id_programa or 0)
+                    prog = getattr(pv, 'programa', None)
+                    if prog:
+                        object.__setattr__(data, 'programa_nombre', prog.nombre_programa or "")
         return data

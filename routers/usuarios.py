@@ -60,6 +60,82 @@ def _usuario_a_response(usuario: Usuario) -> UserAdminResponse:
     )
 
 
+def _obtener_datos_perfil(usuario: Usuario) -> dict:
+    if usuario.alumno:
+        return {
+            "ci": usuario.alumno.ci,
+            "nombre": usuario.alumno.nombre,
+            "apellido": usuario.alumno.apellido,
+            "correo": usuario.alumno.correo,
+            "genero": usuario.alumno.genero,
+            "celular": usuario.alumno.celular,
+        }
+    if usuario.docente:
+        return {
+            "ci": usuario.docente.ci,
+            "nombre": usuario.docente.nombre,
+            "apellido": usuario.docente.apellido,
+            "correo": usuario.docente.correo,
+            "genero": usuario.docente.genero,
+            "celular": usuario.docente.celular,
+        }
+    if usuario.administrativo:
+        return {
+            "ci": usuario.administrativo.ci,
+            "nombre": usuario.administrativo.nombre,
+            "apellido": usuario.administrativo.apellido,
+            "correo": usuario.administrativo.correo,
+            "genero": None,
+            "celular": usuario.administrativo.celular,
+        }
+    return {"ci": None, "nombre": "", "apellido": "", "correo": usuario.email, "genero": None, "celular": None}
+
+
+def _auto_crear_perfiles(db: Session, usuario: Usuario, roles_nuevos_ids: set, roles_map: dict):
+    datos = _obtener_datos_perfil(usuario)
+    ci = datos.get("ci")
+    if not ci:
+        return
+    correo = datos.get("correo") or usuario.email
+    for id_rol in roles_nuevos_ids:
+        rol = roles_map.get(id_rol)
+        if not rol:
+            continue
+        if rol.nombre == "docente" and not usuario.docente:
+            existente = db.query(Docente).filter(Docente.ci == ci).first()
+            if existente:
+                if not existente.id_usuario:
+                    existente.id_usuario = usuario.id_usuario
+            else:
+                db.add(Docente(
+                    ci=ci, nombre=datos["nombre"], apellido=datos["apellido"],
+                    correo=correo, genero=datos.get("genero"), celular=datos.get("celular"),
+                    id_usuario=usuario.id_usuario,
+                ))
+        elif rol.nombre == "alumno" and not usuario.alumno:
+            existente = db.query(Alumno).filter(Alumno.ci == ci).first()
+            if existente:
+                if not existente.id_usuario:
+                    existente.id_usuario = usuario.id_usuario
+            else:
+                db.add(Alumno(
+                    ci=ci, nombre=datos["nombre"], apellido=datos["apellido"],
+                    correo=correo, genero=datos.get("genero"), celular=datos.get("celular"),
+                    id_usuario=usuario.id_usuario,
+                ))
+        elif rol.nombre not in ("alumno", "docente") and not usuario.administrativo:
+            existente = db.query(Administrativo).filter(Administrativo.ci == ci).first()
+            if existente:
+                if not existente.id_usuario:
+                    existente.id_usuario = usuario.id_usuario
+            else:
+                db.add(Administrativo(
+                    ci=ci, nombre=datos["nombre"], apellido=datos["apellido"],
+                    correo=correo, celular=datos.get("celular"),
+                    id_usuario=usuario.id_usuario,
+                ))
+
+
 def _es_unico_admin_informatico(db: Session, id_usuario: int) -> bool:
     rol_informatico = db.query(Rol).filter(Rol.nombre == "adm_informatico").first()
     if not rol_informatico:
@@ -201,9 +277,8 @@ def crear_usuario(
                 if rol.nombre == "alumno":
                     tiene_alumno = True
 
-        # Rol base alumno solo cuando la persona es de tipo alumno.
-        es_alumno = data.tipo_persona == "alumno" or tiene_alumno
-        if es_alumno and not tiene_alumno:
+        # Rol base alumno siempre se agrega a todo usuario nuevo
+        if not tiene_alumno:
             rol_alumno = db.query(Rol).filter(Rol.nombre == "alumno").first()
             if rol_alumno:
                 db.add(UsuarioRol(id_usuario=usuario.id_usuario, id_rol=rol_alumno.id_rol))
@@ -357,7 +432,12 @@ def actualizar_roles_usuario(
     db: Session = Depends(get_db),
     current_user: UserResponse = Depends(require_permiso("usuarios.gestionar")),
 ):
-    usuario = db.query(Usuario).filter(Usuario.id_usuario == id_usuario).first()
+    usuario = db.query(Usuario).options(
+        joinedload(Usuario.alumno),
+        joinedload(Usuario.docente),
+        joinedload(Usuario.administrativo),
+        joinedload(Usuario.usuario_roles),
+    ).filter(Usuario.id_usuario == id_usuario).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
@@ -375,6 +455,10 @@ def actualizar_roles_usuario(
         raise HTTPException(status_code=400, detail="Todo usuario debe mantener el rol de estudiante como base")
 
     try:
+        roles_actuales_ids = {ur.id_rol for ur in usuario.usuario_roles}
+        roles_nuevos_ids = set(data.roles) - roles_actuales_ids
+        _auto_crear_perfiles(db, usuario, roles_nuevos_ids, roles_map)
+
         db.query(UsuarioRol).filter(UsuarioRol.id_usuario == id_usuario).delete()
 
         for id_rol in data.roles:
