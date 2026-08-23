@@ -17,6 +17,9 @@ from models.modalidad_tipo_descuento import ModalidadTipoDescuento
 from models.modalidad_requisito import ModalidadRequisito
 from models.tipo_descuento_requisito import TipoDescuentoRequisito
 from models.contratacion_docente import ContratacionDocente
+from models.etapa_contratacion import EtapaContratacion
+from models.etapa_requisito import EtapaRequisito
+from models.control_documentacion_contratacion import ControlDocumentacionContratacion
 from models.documento_contratacion import DocumentoContratacion
 from models.rol import Rol
 from models.permiso import Permiso
