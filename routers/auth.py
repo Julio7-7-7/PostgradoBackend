@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from database import get_db
 from models.usuario import Usuario
@@ -137,6 +138,7 @@ def registro(data: RegistroRequest, request: Request, db: Session = Depends(get_
         must_change_password=usuario.must_change_password,
         permisos=permisos,
         roles=roles_disponibles,
+        password_changed_at=usuario.password_changed_at,
     )
 
     token = create_access_token({"id_usuario": usuario.id_usuario, "id_rol": rol_alumno.id_rol})
@@ -156,6 +158,12 @@ def seleccionar_rol(data: SelectRolRequest, request: Request, db: Session = Depe
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Rol no válido para este usuario",
+        )
+
+    if not usuario_rol.rol_activo:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Este rol se encuentra desactivado",
         )
 
     usuario = db.query(Usuario).filter(
@@ -186,6 +194,7 @@ def seleccionar_rol(data: SelectRolRequest, request: Request, db: Session = Depe
         must_change_password=usuario.must_change_password,
         permisos=permisos,
         roles=roles_disponibles,
+        password_changed_at=usuario.password_changed_at,
     )
 
     token = create_access_token({"id_usuario": usuario.id_usuario, "id_rol": data.id_rol})
@@ -211,6 +220,7 @@ def cambiar_password(
 
     usuario.password_hash = pwd_context.hash(data.password_nuevo)
     usuario.must_change_password = False
+    usuario.password_changed_at = func.now()
     db.commit()
     return {"detail": "Contraseña actualizada correctamente"}
 
@@ -259,6 +269,8 @@ def me(current_user: UserResponse = Depends(get_current_user), db: Session = Dep
                     "tipo": "administrativo",
                 }
 
+    usuario = db.query(Usuario).filter(Usuario.id_usuario == current_user.id_usuario).first()
+
     return MeResponse(
         id_usuario=current_user.id_usuario,
         email=current_user.email,
@@ -267,4 +279,5 @@ def me(current_user: UserResponse = Depends(get_current_user), db: Session = Dep
         permisos=current_user.permisos,
         roles=current_user.roles,
         profile=profile,
+        password_changed_at=usuario.password_changed_at if usuario else None,
     )

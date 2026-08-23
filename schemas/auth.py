@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
-from datetime import date
+from datetime import datetime, date
 from enum import Enum
 from schemas.enums import GeneroEnum
 
@@ -51,6 +51,7 @@ class UserResponse(BaseModel):
     must_change_password: bool = False
     permisos: list[PermisoInfo] = []
     roles: list[RolInfo] = []
+    password_changed_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -146,5 +147,6 @@ class MeResponse(BaseModel):
     permisos: list[PermisoInfo]
     roles: list[RolInfo]
     profile: dict | None = None
+    password_changed_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
