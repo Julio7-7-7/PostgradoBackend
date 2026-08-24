@@ -47,12 +47,12 @@ def seed():
         "alumnos.ver", "alumnos.crear", "alumnos.editar",
         "documentos.revisar", "documentos.aprobar",
 
-        "pagos.ver", "pagos.registrar",
+        "pagos.ver", "pagos.registrar", "pagos.anular",
 
         "tipos_programa.ver", "tipos_programa.crear", "tipos_programa.editar",
         "modalidades_academicas.ver", "modalidades_academicas.crear", "modalidades_academicas.editar",
         "requisitos.ver", "requisitos.crear", "requisitos.editar", "requisitos.eliminar",
-        "tipos_descuento.ver", "tipos_descuento.crear", "tipos_descuento.editar",
+        "tipos_descuento.ver", "tipos_descuento.crear", "tipos_descuento.editar", "tipos_descuento.eliminar",
 
         "historial.ver",
         "notas.subir", "notas.ver", "notas.aprobar",
@@ -103,14 +103,17 @@ def seed():
             "notas.ver", "notas.aprobar",
             "historial.ver",
             "modalidades_academicas.ver",
+            "tipos_programa.ver",
         ],
 
         "adm_pasante": [
             "dashboard.ver",
             "alumnos.ver",
-            "documentos.revisar",
+            "documentos.revisar", "documentos.aprobar",
             "ediciones.ver",
             "programas.ver",
+            "tipos_programa.ver", "tipos_programa.crear",
+            "historial.ver",
         ],
 
         "docente": [

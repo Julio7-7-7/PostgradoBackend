@@ -19,4 +19,5 @@ class DocumentoContratacion(Base):
     orden = Column(Integer, nullable=False)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
-    contratacion = relationship("ContratacionDocente", back_populates="documentos")
+    # Relación deshabilitada: 'documentos' ahora apunta a ControlDocumentacionContratacion
+    # contratacion = relationship("ContratacionDocente", back_populates="documentos")

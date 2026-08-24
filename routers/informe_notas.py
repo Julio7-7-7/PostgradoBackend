@@ -64,8 +64,8 @@ def _alumnos_elegibles(db: Session, id_edicion: int) -> list[dict]:
           -- Todos los pagos completos
           AND NOT EXISTS (
               SELECT 1
-              FROM ordenes_pago op
-              LEFT JOIN transacciones_pago tp ON tp.id_orden_pago = op.id_orden_pago
+              FROM orden_pago op
+              LEFT JOIN transaccion_pago tp ON tp.id_orden_pago = op.id_orden_pago
               WHERE op.id_detalle_programa_alumno = dpa.id_detalle_programa_alumno
                 AND tp.id_transaccion IS NULL
           )

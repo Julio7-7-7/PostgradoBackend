@@ -15,6 +15,8 @@ from routers import historial_modulo
 from routers import tipo_descuento
 from routers import contrataciones_docente
 from routers import documentos_contratacion
+from routers import etapa_contratacion
+from routers import control_documentacion_contratacion
 from routers import auth
 from routers import roles
 from routers import permisos
@@ -48,6 +50,8 @@ all_routers = [
     tipo_descuento.router,
     contrataciones_docente.router,
     documentos_contratacion.router,
+    etapa_contratacion.router,
+    control_documentacion_contratacion.router,
     auth.router,
     roles.router,
     permisos.router,

@@ -37,6 +37,8 @@ class ContratacionDocenteResponse(ContratacionDocenteBase):
     fecha_inicio: date | None = None
     fecha_fin: date | None = None
     estado: ContratacionEstadoEnum
+    id_etapa_actual: int | None = None
+    etapa_actual_nombre: str = ""
     docente: DocenteResponse
     id_programa: int = 0
     programa_nombre: str = ""
@@ -67,4 +69,7 @@ class ContratacionDocenteResponse(ContratacionDocenteBase):
                     prog = getattr(pv, 'programa', None)
                     if prog:
                         object.__setattr__(data, 'programa_nombre', prog.nombre_programa or "")
+        etapa = getattr(data, 'etapa_actual', None)
+        if etapa:
+            object.__setattr__(data, 'etapa_actual_nombre', getattr(etapa, 'nombre', '') or '')
         return data

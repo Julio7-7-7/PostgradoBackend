@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from dependencies import get_current_user, require_permiso
 from models.tipo_descuento import TipoDescuento
-from models.modalidad_academica import ModalidadAcademica
+from models.modalidad_tipo_programa import ModalidadTipoPrograma
 from models.requisito import Requisito
 from schemas.tipo_descuento import TipoDescuentoCreate, TipoDescuentoUpdate, TipoDescuentoResponse
 from schemas.auth import UserResponse
@@ -73,10 +73,22 @@ def crear(data: TipoDescuentoCreate, db: Session = Depends(get_db), current_user
 
 
 @router.get("/", response_model=list[TipoDescuentoResponse])
-def listar(db: Session = Depends(get_db), current_user: UserResponse = Depends(require_permiso("tipos_descuento.ver"))):
-    return _cargar_con_relations(
-        db.query(TipoDescuento)
-    ).all()
+def listar(
+    id_tipo_programa: int | None = Query(None),
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(require_permiso("tipos_descuento.ver")),
+):
+    query = db.query(TipoDescuento)
+    if id_tipo_programa is not None:
+        modalidad_ids = db.query(ModalidadTipoPrograma.id_modalidad_academica).filter(
+            ModalidadTipoPrograma.id_tipo_programa == id_tipo_programa
+        ).subquery()
+        from models.modalidad_tipo_descuento import ModalidadTipoDescuento
+        descuento_ids = db.query(ModalidadTipoDescuento.id_tipo_descuento).filter(
+            ModalidadTipoDescuento.id_modalidad_academica.in_(modalidad_ids)
+        ).distinct().subquery()
+        query = query.filter(TipoDescuento.id_tipo_descuento.in_(descuento_ids))
+    return _cargar_con_relations(query).all()
 
 
 @router.get("/{id}", response_model=TipoDescuentoResponse)

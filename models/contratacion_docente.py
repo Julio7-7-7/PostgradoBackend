@@ -27,14 +27,16 @@ class ContratacionDocente(Base):
     fecha_inicio = Column(Date, nullable=True)
     fecha_fin = Column(Date, nullable=True)
     estado = Column(String(30), nullable=False, default="pendiente")
+    id_etapa_actual = Column(Integer, ForeignKey("etapa_contratacion.id_etapa"), nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
     docente = relationship("Docente", back_populates="contrataciones")
     detalle_modulo = relationship("DetalleProgramaModulo", back_populates="contrataciones")
+    etapa_actual = relationship("EtapaContratacion")
 
     documentos = relationship(
-        "DocumentoContratacion",
+        "ControlDocumentacionContratacion",
         back_populates="contratacion",
         cascade="all, delete-orphan",
     )

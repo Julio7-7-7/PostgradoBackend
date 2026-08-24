@@ -100,7 +100,7 @@ def _obtener_roles_usuario(db: Session, id_usuario: int) -> list[RolInfo]:
     rows = (
         db.query(Rol)
         .join(UsuarioRol, UsuarioRol.id_rol == Rol.id_rol)
-        .filter(UsuarioRol.id_usuario == id_usuario)
+        .filter(UsuarioRol.id_usuario == id_usuario, UsuarioRol.rol_activo == True)
         .all()
     )
     return [RolInfo(id_rol=r.id_rol, nombre=r.nombre, descripcion=r.descripcion) for r in rows]

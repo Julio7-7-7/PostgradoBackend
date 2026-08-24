@@ -9,7 +9,7 @@ class UsuarioRol(Base):
 
     id_usuario = Column(Integer, ForeignKey("usuarios.id_usuario"), primary_key=True)
     id_rol = Column(Integer, ForeignKey("roles.id_rol"), primary_key=True)
-    rol_activo = Column(Boolean, default=False, nullable=False)
+    rol_activo = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
     usuario = relationship("Usuario", back_populates="usuario_roles")
