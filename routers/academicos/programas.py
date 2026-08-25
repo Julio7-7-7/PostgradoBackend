@@ -5,7 +5,7 @@ from dependencies import get_current_user, require_permiso
 from models.programa import Programa
 from schemas.programa import ProgramaCreate, ProgramaUpdate, ProgramaResponse
 from schemas.auth import UserResponse
-from .utils import guardar_foto_base64, eliminar_foto
+from routers._utils import guardar_foto_base64, eliminar_foto
 
 router = APIRouter(
     prefix="/programas",

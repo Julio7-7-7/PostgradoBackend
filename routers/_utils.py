@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 from fastapi import HTTPException
 from pathlib import Path
 from sqlalchemy.orm import Session
@@ -114,6 +115,24 @@ def eliminar_foto(ruta: str | None):
         archivo = Path(__file__).parent.parent / ruta.lstrip("/")
         if archivo.exists():
             archivo.unlink()
+
+
+def es_dia_habil(fecha: date) -> bool:
+    return fecha.weekday() < 5
+
+
+def sumar_dias_habiles(fecha: date, dias: int) -> date:
+    resultado = fecha
+    agregados = 0
+    while agregados < dias:
+        resultado += timedelta(days=1)
+        if es_dia_habil(resultado):
+            agregados += 1
+    return resultado
+
+
+def esta_en_plazo_notas(fecha_fin: date, ventana: int = 5) -> bool:
+    return date.today() <= sumar_dias_habiles(fecha_fin, ventana)
 
 
 from models.detalle_programa_modulo import DetalleProgramaModulo

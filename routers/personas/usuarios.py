@@ -293,7 +293,7 @@ def crear_usuario(
             docente_a_vincular.id_usuario = usuario.id_usuario
 
         if data.ci:
-            if es_alumno:
+            if True:
                 db.add(Alumno(
                     ci=ci_norm,
                     nombre=data.nombre.strip(),

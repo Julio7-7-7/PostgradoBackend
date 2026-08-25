@@ -21,7 +21,7 @@ from schemas.detalle_programa_alumno import (
 )
 from schemas.admin import AutoInscribirRequest
 from schemas.auth import UserResponse
-from routers.utils import resolver_modulo_inicio
+from routers._utils import resolver_modulo_inicio
 
 router = APIRouter(
     prefix="/detalle-programa-alumno",
