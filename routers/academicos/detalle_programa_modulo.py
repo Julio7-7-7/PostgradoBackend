@@ -13,7 +13,8 @@ from models.programa_version import ProgramaVersion
 from models.programa_version_edicion import ProgramaVersionEdicion
 from schemas.detalle_programa_modulo import DetalleProgramaModuloCreate, DetalleProgramaModuloUpdate, DetalleProgramaModuloResponse, ReordenarRequest
 from schemas.auth import UserResponse
-from routers.edition_state import actualizar_estado_edicion
+from routers._edition_state import actualizar_estado_edicion
+from routers._utils import sumar_dias_habiles
 
 router = APIRouter(
     prefix="/detalle-programa-modulo",
@@ -25,7 +26,7 @@ DURACION_MINIMA_DIAS = 30
 
 ESTADOS_CON_MOTIVO = {"reprogramado"}
 MOTIVO_AUTO_EN_CURSO = "Cambiado a estado en curso por fechas"
-MOTIVO_AUTO_FINALIZADO = "Cambiado a estado finalizado por fecha de fin"
+MOTIVO_AUTO_FINALIZADO = "Finalizado por vencimiento del plazo de calificación"
 
 ESTADO_TRANSICIONES = {
     "programado": {"en_curso"},
@@ -100,21 +101,23 @@ def actualizar_estado_auto(detalle: DetalleProgramaModulo, db: Session) -> bool:
         actualizar_estado_edicion(detalle.id_programa_version_edicion, db)
         return True
 
-    if detalle.estado == "en_curso" and detalle.fecha_fin and detalle.fecha_fin < hoy:
-        detalle.estado = "finalizado"
-        historial = HistorialModulo(
-            id_detalle_programa_modulo=detalle.id_detalle_programa_modulo,
-            estado_anterior="en_curso",
-            estado_nuevo="finalizado",
-            motivo=MOTIVO_AUTO_FINALIZADO,
-            fecha_inicio_original=detalle.fecha_inicio,
-            fecha_inicio_nuevo=detalle.fecha_inicio,
-            fecha_fin_original=detalle.fecha_fin,
-            fecha_fin_nuevo=detalle.fecha_fin,
-        )
-        db.add(historial)
-        actualizar_estado_edicion(detalle.id_programa_version_edicion, db)
-        return True
+    if detalle.estado == "en_curso" and detalle.fecha_fin:
+        fecha_limite_notas = sumar_dias_habiles(detalle.fecha_fin, 5)
+        if hoy > fecha_limite_notas:
+            detalle.estado = "finalizado"
+            historial = HistorialModulo(
+                id_detalle_programa_modulo=detalle.id_detalle_programa_modulo,
+                estado_anterior="en_curso",
+                estado_nuevo="finalizado",
+                motivo=MOTIVO_AUTO_FINALIZADO,
+                fecha_inicio_original=detalle.fecha_inicio,
+                fecha_inicio_nuevo=detalle.fecha_inicio,
+                fecha_fin_original=detalle.fecha_fin,
+                fecha_fin_nuevo=detalle.fecha_fin,
+            )
+            db.add(historial)
+            actualizar_estado_edicion(detalle.id_programa_version_edicion, db)
+            return True
 
     return False
 
@@ -237,7 +240,7 @@ def reordenar(data: ReordenarRequest, db: Session = Depends(get_db), current_use
             ContratacionDocente.estado != "truncado",
         ).first()
         if contratacion_activa:
-            from routers.contrataciones_docente import verificar_disponibilidad
+            from routers.docentes.contrataciones import verificar_disponibilidad
             db.flush()
             verificar_disponibilidad(db, contratacion_activa.id_docente, d.id_detalle_programa_modulo)
             contratacion_activa.fecha_inicio = d.fecha_inicio
@@ -424,7 +427,7 @@ def editar(id: int, data: DetalleProgramaModuloUpdate, db: Session = Depends(get
             ContratacionDocente.estado != "truncado",
         ).first()
         if contratacion_activa:
-            from routers.contrataciones_docente import verificar_disponibilidad
+            from routers.docentes.contrataciones import verificar_disponibilidad
             db.flush()
             verificar_disponibilidad(db, contratacion_activa.id_docente, id)
             contratacion_activa.fecha_inicio = detalle.fecha_inicio

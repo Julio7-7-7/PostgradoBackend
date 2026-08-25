@@ -32,7 +32,7 @@ from schemas.solicitud import (
     DestinosRecomendadosResponse,
 )
 from schemas.auth import UserResponse
-from routers.utils import guardar_documento_base64, inferir_tipo_movimiento, resolver_modulo_inicio
+from routers._utils import guardar_documento_base64, inferir_tipo_movimiento, resolver_modulo_inicio
 
 router = APIRouter(
     prefix="/solicitud",
@@ -566,14 +566,14 @@ def aprobar(
             raise HTTPException(status_code=404, detail="Edición no encontrada")
 
         pv = pve.programa_version
-        from routers.detalle_programa_alumno import _validar_cupo, validar_modalidad_programa
+        from routers.inscripciones.detalle_alumno import _validar_cupo, validar_modalidad_programa
 
         validar_modalidad_programa(inc.id_modalidad_academica, pve.id_programa_version_edicion, db)
         _validar_cupo(pve.id_programa_version_edicion, db)
 
         descuento_aplicado = 0.0
         if inc.id_tipo_descuento:
-            from routers.detalle_programa_alumno import _validar_descuento
+            from routers.inscripciones.detalle_alumno import _validar_descuento
             td = _validar_descuento(inc.id_tipo_descuento, inc.id_modalidad_academica, solicitud.id_alumno, db)
             descuento_aplicado = td.porcentaje
 
@@ -607,7 +607,7 @@ def aprobar(
         )
         db.add(historial)
 
-        from routers.detalle_programa_alumno import generar_control_documentacion, generar_control_descuento
+        from routers.inscripciones.detalle_alumno import generar_control_documentacion, generar_control_descuento
         generar_control_documentacion(nuevo.id_detalle_programa_alumno, inc.id_modalidad_academica, db)
         if inc.id_tipo_descuento:
             generar_control_descuento(nuevo.id_detalle_programa_alumno, inc.id_modalidad_academica,
@@ -627,7 +627,7 @@ def aprobar(
             raise HTTPException(status_code=404, detail="Edición destino no encontrada")
 
         pv = pve_destino.programa_version
-        from routers.detalle_programa_alumno import _validar_cupo
+        from routers.inscripciones.detalle_alumno import _validar_cupo
 
         dpa_origen = None
         if solicitud.id_detalle_origen:
@@ -671,7 +671,7 @@ def aprobar(
 
         descuento_aplicado = 0.0
         if data.id_tipo_descuento:
-            from routers.detalle_programa_alumno import _validar_descuento
+            from routers.inscripciones.detalle_alumno import _validar_descuento
             td = _validar_descuento(data.id_tipo_descuento, modalidad_heredada, None, db)
             descuento_aplicado = td.porcentaje
 
@@ -712,7 +712,7 @@ def aprobar(
 
         solicitud.id_detalle_origen = nuevo.id_detalle_programa_alumno
 
-        from routers.detalle_programa_alumno import generar_control_documentacion, generar_control_descuento
+        from routers.inscripciones.detalle_alumno import generar_control_documentacion, generar_control_descuento
         generar_control_documentacion(nuevo.id_detalle_programa_alumno, modalidad_heredada, db)
         if data.id_tipo_descuento:
             generar_control_descuento(nuevo.id_detalle_programa_alumno, modalidad_heredada, data.id_tipo_descuento, db)

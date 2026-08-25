@@ -5,7 +5,7 @@ from dependencies import require_permiso
 from models.requisito import Requisito
 from schemas.requisito import RequisitoCreate, RequisitoUpdate, RequisitoResponse
 from schemas.auth import UserResponse
-from .utils import guardar_foto_base64, eliminar_foto
+from routers._utils import guardar_foto_base64, eliminar_foto
 
 router = APIRouter(
     prefix="/requisitos",

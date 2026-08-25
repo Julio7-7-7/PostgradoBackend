@@ -21,7 +21,7 @@ from schemas.nota import (
 )
 from schemas.enums import clasificar_nota, redondear_nota, ESTADOS_CON_CALIFICACION
 from schemas.auth import UserResponse
-from routers.utils import es_alumno_actual
+from routers._utils import es_alumno_actual
 
 router = APIRouter(
     prefix="/notas",

@@ -10,7 +10,7 @@ from models.detalle_programa_alumno import DetalleProgramaAlumno
 from models.alumno import Alumno
 from schemas.control_documentacion import ControlDocumentacionCreate, ControlDocumentacionUpdate, ControlDocumentacionResponse, PaginatedControlDocumentacionResponse
 from schemas.auth import UserResponse
-from routers.utils import guardar_documento_base64, eliminar_foto, es_alumno_actual
+from routers._utils import guardar_documento_base64, eliminar_foto, es_alumno_actual
 
 router = APIRouter(
     prefix="/control-documentacion",

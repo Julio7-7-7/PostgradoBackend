@@ -7,7 +7,7 @@ from database import get_db
 from dependencies import get_current_user, require_permiso
 from models.detalle_programa_alumno import DetalleProgramaAlumno
 from models.transaccion_pago import TransaccionPago
-from routers.pago import _cargar_movimientos, _serializar_pago
+from routers.pagos.matriz import _cargar_movimientos, _serializar_pago
 from schemas.auth import UserResponse
 from schemas.transaccion_pago import TransaccionPagoBaja, TransaccionPagoResponse
 

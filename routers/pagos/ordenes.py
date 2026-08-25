@@ -11,9 +11,9 @@ from models.orden_pago import OrdenPago
 from models.pago import Pago
 from models.programa_version_edicion import ProgramaVersionEdicion
 from models.transaccion_pago import TransaccionPago
-from routers.pago import _plan_exacto, _serializar_orden
-from routers.transaccion_pago import _serializar_transaccion
-from routers.utils import es_alumno_actual, guardar_documento_base64
+from routers.pagos.matriz import _plan_exacto, _serializar_orden
+from routers.pagos.transacciones import _serializar_transaccion
+from routers._utils import es_alumno_actual, guardar_documento_base64
 from schemas.auth import UserResponse
 from schemas.orden_pago import OrdenPagoBaja, OrdenPagoEmitir, OrdenPagoPagar, OrdenPagoResponse
 from schemas.transaccion_pago import TransaccionPagoResponse

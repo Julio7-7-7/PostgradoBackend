@@ -12,7 +12,7 @@ from schemas.documentos_contratacion import (
     DocumentoContratacionResponse,
 )
 from schemas.auth import UserResponse
-from routers.utils import guardar_pdf_base64
+from routers._utils import guardar_pdf_base64
 
 router = APIRouter(
     prefix="/documentos-contratacion",
