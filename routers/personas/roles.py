@@ -126,19 +126,12 @@ def actualizar_rol(
     if data.descripcion is not None:
         rol.descripcion = data.descripcion
     if data.permisos is not None:
-        permiso_gestionar = db.query(Permiso).filter(Permiso.codigo == "roles.gestionar").first()
-        if permiso_gestionar:
-            queria_quitar = permiso_gestionar.id_permiso not in data.permisos
-            tiene_usuarios = db.query(UsuarioRol).filter(UsuarioRol.id_rol == id_rol).first()
-            if queria_quitar and tiene_usuarios:
+        if current_user.id_rol == id_rol:
+            permiso_gestionar = db.query(Permiso).filter(Permiso.codigo == "roles.gestionar").first()
+            if permiso_gestionar and permiso_gestionar.id_permiso not in data.permisos:
                 raise HTTPException(
                     status_code=400,
-                    detail="No se puede quitar el permiso 'roles.gestionar' de un rol que tiene usuarios asignados",
-                )
-            if queria_quitar and current_user.id_rol == id_rol:
-                raise HTTPException(
-                    status_code=400,
-                    detail="No podés quitar 'roles.gestionar' de tu propio rol activo",
+                    detail="No podés quitarte a vos mismo el permiso 'roles.gestionar'",
                 )
 
         db.query(RolesPermiso).filter(RolesPermiso.id_rol == id_rol).delete()
