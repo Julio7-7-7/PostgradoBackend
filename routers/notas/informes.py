@@ -9,14 +9,9 @@ from dependencies import get_current_user, require_permiso
 from models.informe_notas import InformeNotas
 from models.certificado_notas import CertificadoNotas
 from models.programa_version_edicion import ProgramaVersionEdicion
-from models.detalle_programa_alumno import DetalleProgramaAlumno
 from models.alumno import Alumno
 from schemas.auth import UserResponse
-from schemas.informe_notas import (
-    InformeNotasCreate,
-    InformeNotasResponse,
-    InformeNotasAlumnoDetalle,
-)
+from schemas.informe_notas import InformeNotasCreate
 
 router = APIRouter(
     prefix="/informes-notas",

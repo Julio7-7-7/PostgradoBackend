@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 from database import get_db
 from models.usuario import Usuario
-from models.usuario_rol import UsuarioRol
 from models.rol import Rol
 from schemas.persona import PersonaResponse, PaginatedPersonasResponse, RolInfo
 from dependencies import get_current_user, require_permiso

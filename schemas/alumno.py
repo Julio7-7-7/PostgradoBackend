@@ -52,6 +52,37 @@ class AlumnoBase(BaseModel):
 class AlumnoCreate(AlumnoBase):
     pass
 
+
+class AlumnoConUsuarioCreate(BaseModel):
+    email: str
+    ci: str
+    nombre: str
+    apellido: str
+    celular: str | None = None
+    fecha_nacimiento: date | None = None
+    genero: GeneroEnum | None = None
+
+    @field_validator("email")
+    @classmethod
+    def validar_email(cls, v):
+        if "@" not in v:
+            raise ValueError("Correo inválido")
+        return v.strip().lower()
+
+    @field_validator("ci")
+    @classmethod
+    def validar_ci(cls, v):
+        if len(v.strip()) < 5:
+            raise ValueError("El CI debe tener al menos 5 caracteres")
+        return v.strip()
+
+    @field_validator("nombre", "apellido")
+    @classmethod
+    def validar_nombre(cls, v):
+        if len(v.strip()) < 2:
+            raise ValueError("Debe tener al menos 2 caracteres")
+        return v.strip().title()
+
 class AlumnoUpdate(BaseModel):
     ci: str | None = None
     pasaporte: str | None = None
