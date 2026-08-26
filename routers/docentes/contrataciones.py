@@ -84,7 +84,6 @@ def query_base(db):
     from models.modulo import Modulo
     from models.programa_version import ProgramaVersion
     from models.programa import Programa
-    from models.etapa_contratacion import EtapaContratacion
     return db.query(ContratacionDocente).options(
         joinedload(ContratacionDocente.docente),
         joinedload(ContratacionDocente.detalle_modulo).joinedload(DetalleProgramaModulo.modulo),

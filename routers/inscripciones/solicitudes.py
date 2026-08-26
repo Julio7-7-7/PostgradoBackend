@@ -20,6 +20,7 @@ from models.control_documentacion import ControlDocumentacion
 from models.historial_inscripcion import HistorialInscripcion
 from schemas.solicitud import (
     SolicitudCreate,
+    SolicitudAdminCreate,
     AprobarSolicitudRequest,
     SolicitudResponse,
     SolicitudConDetalle,
@@ -373,6 +374,81 @@ def solicitar(
         documentos=_build_docs_response(solicitud.documentos, db),
         incorporacion=SolicitudIncorporacionResponse.model_validate(solicitud.incorporacion) if solicitud.incorporacion else None,
         migracion=SolicitudMigracionResponse.model_validate(solicitud.migracion) if solicitud.migracion else None,
+    )
+
+
+@router.post("/crear-admin", response_model=SolicitudConDetalle, status_code=201)
+def crear_admin(
+    data: SolicitudAdminCreate = Body(...),
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(require_permiso("alumnos.editar")),
+):
+    pve = db.query(ProgramaVersionEdicion).filter(
+        ProgramaVersionEdicion.id_programa_version_edicion == data.id_programa_version_edicion
+    ).first()
+    if not pve:
+        raise HTTPException(status_code=404, detail="Edición no encontrada")
+    if pve.estado not in ("programado", "en_curso"):
+        raise HTTPException(
+            status_code=400,
+            detail="La inscripción desde admin solo está disponible para ediciones programadas o en curso"
+        )
+
+    alumno = db.query(Alumno).filter(Alumno.id_alumno == data.id_alumno).first()
+    if not alumno:
+        raise HTTPException(status_code=404, detail="Alumno no encontrado")
+
+    from routers.inscripciones.detalle_alumno import validar_modalidad_programa
+
+    validar_modalidad_programa(data.id_modalidad_academica, data.id_programa_version_edicion, db)
+
+    tipo = db.query(TipoSolicitud).filter(TipoSolicitud.codigo == "incorporacion").first()
+    if not tipo:
+        raise HTTPException(status_code=400, detail="Tipo de solicitud 'incorporacion' no encontrado en el sistema")
+
+    es_en_curso = pve.estado == "en_curso"
+    motivo_base = "Incorporación" if es_en_curso else "Inscripción"
+
+    solicitud = Solicitud(
+        id_tipo_solicitud=tipo.id_tipo_solicitud,
+        id_alumno=data.id_alumno,
+        estado="pendiente",
+        motivo=data.motivo or f"{motivo_base} directa desde administración",
+    )
+    db.add(solicitud)
+    db.flush()
+
+    incorporacion = SolicitudIncorporacion(
+        id_solicitud=solicitud.id_solicitud,
+        id_programa_version_edicion=data.id_programa_version_edicion,
+        id_modalidad_academica=data.id_modalidad_academica,
+        id_tipo_descuento=data.id_tipo_descuento,
+    )
+    db.add(incorporacion)
+    db.flush()
+
+    _crear_documentos(solicitud.id_solicitud, tipo.id_tipo_solicitud, "", db)
+
+    db.commit()
+    db.refresh(solicitud)
+
+    return SolicitudConDetalle(
+        id_solicitud=solicitud.id_solicitud,
+        id_tipo_solicitud=solicitud.id_tipo_solicitud,
+        tipo_codigo="incorporacion",
+        id_alumno=solicitud.id_alumno,
+        id_detalle_origen=solicitud.id_detalle_origen,
+        estado=solicitud.estado,
+        motivo=solicitud.motivo,
+        motivo_rechazo=solicitud.motivo_rechazo,
+        created_at=solicitud.created_at,
+        updated_at=solicitud.updated_at,
+        documentos=_build_docs_response(solicitud.documentos, db),
+        incorporacion=SolicitudIncorporacionResponse.model_validate(solicitud.incorporacion) if solicitud.incorporacion else None,
+        migracion=None,
+        alumno_nombre=alumno.nombre,
+        alumno_apellido=alumno.apellido,
+        alumno_ci=alumno.ci,
     )
 
 

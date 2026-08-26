@@ -3,10 +3,17 @@ from sqlalchemy.orm import Session
 from database import get_db
 from dependencies import get_current_user, require_permiso
 from models.alumno import Alumno
+from models.usuario import Usuario
+from models.usuario_rol import UsuarioRol
+from models.rol import Rol
 from models.detalle_programa_alumno import DetalleProgramaAlumno
 from models.programa_version_edicion import ProgramaVersionEdicion
-from schemas.alumno import AlumnoCreate, AlumnoUpdate, AlumnoResponse
+from schemas.alumno import AlumnoCreate, AlumnoUpdate, AlumnoResponse, AlumnoConUsuarioCreate
+from schemas.admin import UserAdminResponse
 from schemas.auth import UserResponse
+from passlib.context import CryptContext
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 router = APIRouter(
     prefix="/alumnos",
@@ -30,6 +37,73 @@ def crear(data: AlumnoCreate, db: Session = Depends(get_db), current_user: UserR
     db.commit()
     db.refresh(nuevo)
     return nuevo
+
+
+@router.post("/crear-con-usuario", response_model=UserAdminResponse, status_code=201)
+def crear_con_usuario(
+    data: AlumnoConUsuarioCreate,
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(require_permiso("alumnos.crear")),
+):
+    email_norm = data.email.strip().lower()
+    ci_norm = data.ci.strip()
+
+    if db.query(Usuario).filter(Usuario.email == email_norm).first():
+        raise HTTPException(status_code=400, detail="Ya existe un usuario con ese email")
+    if db.query(Alumno).filter(Alumno.ci == ci_norm).first():
+        raise HTTPException(status_code=400, detail="Ya existe un alumno con ese CI")
+    if db.query(Alumno).filter(Alumno.correo == email_norm).first():
+        raise HTTPException(status_code=400, detail="Ya existe un alumno con ese correo")
+
+    password_inicial = ci_norm
+    usuario = Usuario(
+        email=email_norm,
+        password_hash=pwd_context.hash(ci_norm),
+        activo=True,
+        must_change_password=True,
+    )
+    db.add(usuario)
+    db.flush()
+
+    rol_alumno = db.query(Rol).filter(Rol.nombre == "alumno").first()
+    if rol_alumno:
+        db.add(UsuarioRol(id_usuario=usuario.id_usuario, id_rol=rol_alumno.id_rol))
+
+    db.add(Alumno(
+        ci=ci_norm,
+        nombre=data.nombre.strip(),
+        apellido=data.apellido.strip(),
+        celular=data.celular,
+        correo=email_norm,
+        fecha_nacimiento=data.fecha_nacimiento,
+        genero=data.genero,
+        id_usuario=usuario.id_usuario,
+    ))
+
+    db.commit()
+    db.refresh(usuario)
+
+    roles_nombres = [ur.rol.nombre for ur in usuario.usuario_roles if ur.rol]
+    roles_ids = [ur.rol.id_rol for ur in usuario.usuario_roles if ur.rol]
+    perfiles = []
+    if usuario.alumno:
+        perfiles.append({
+            "type": "alumno",
+            "id": usuario.alumno.id_alumno,
+            "nombre": f"{usuario.alumno.nombre} {usuario.alumno.apellido}",
+        })
+
+    resp = UserAdminResponse(
+        id_usuario=usuario.id_usuario,
+        email=usuario.email,
+        activo=usuario.activo,
+        roles=roles_nombres,
+        id_roles=roles_ids,
+        perfiles=perfiles,
+        created_at=usuario.created_at,
+    )
+    resp.password_inicial = password_inicial
+    return resp
 
 
 @router.get("/", response_model=list[AlumnoResponse])

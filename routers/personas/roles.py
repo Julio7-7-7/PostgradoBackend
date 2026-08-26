@@ -4,7 +4,6 @@ from database import get_db
 from models.rol import Rol
 from models.permiso import Permiso
 from models.roles_permiso import RolesPermiso
-from models.usuario_rol import UsuarioRol
 from schemas.admin import RolCreate, RolUpdate, RolResponse, PermisoResponse, BatchAsignacionesRequest
 from dependencies import get_current_user, require_permiso
 from schemas.auth import UserResponse

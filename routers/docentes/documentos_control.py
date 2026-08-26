@@ -6,7 +6,6 @@ from models.control_documentacion_contratacion import ControlDocumentacionContra
 from models.contratacion_docente import ContratacionDocente
 from models.etapa_contratacion import EtapaContratacion
 from schemas.control_documentacion_contratacion import (
-    ControlDocContratacionCreate,
     ControlDocContratacionUpdate,
     ControlDocContratacionResponse,
 )

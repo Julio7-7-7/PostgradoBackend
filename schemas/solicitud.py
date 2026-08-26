@@ -18,6 +18,15 @@ class AprobarSolicitudRequest(BaseModel):
     motivo: str = ""
 
 
+class SolicitudAdminCreate(BaseModel):
+    id_alumno: int
+    id_programa_version_edicion: int
+    id_modalidad_academica: int
+    id_tipo_descuento: int | None = None
+    id_modulo_inicio: int | None = None
+    motivo: str | None = None
+
+
 class DocumentoSolicitudResponse(BaseModel):
     id_solicitud_documento: int
     id_requisito: int
