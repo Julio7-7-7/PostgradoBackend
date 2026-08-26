@@ -909,8 +909,11 @@ def subir_documento(
     db: Session = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user),
 ):
-    if current_user.profile_type != "alumno" or not current_user.id_profile:
-        raise HTTPException(status_code=400, detail="El usuario actual no es un alumno")
+    es_admin = any(p.codigo == "alumnos.editar" for p in current_user.permisos)
+    es_alumno = current_user.profile_type == "alumno" and current_user.id_profile
+
+    if not es_admin and not es_alumno:
+        raise HTTPException(status_code=400, detail="No tienes permiso para subir documentos")
 
     solicitud = db.query(Solicitud).options(
         joinedload(Solicitud.documentos),
@@ -925,7 +928,7 @@ def subir_documento(
     if solicitud.estado != "pendiente":
         raise HTTPException(status_code=400, detail="Solo se pueden subir documentos a solicitudes pendientes")
 
-    if solicitud.id_alumno != current_user.id_profile:
+    if not es_admin and solicitud.id_alumno != current_user.id_profile:
         raise HTTPException(status_code=403, detail="Esta solicitud no te pertenece")
 
     doc = next((d for d in solicitud.documentos if d.id_solicitud_documento == id_doc), None)
@@ -940,6 +943,57 @@ def subir_documento(
     doc.url_documento = url
     doc.estado = "entregado"
     doc.fecha_entrega = date.today()
+    db.commit()
+    db.refresh(solicitud)
+
+    tipo_codigo = db.query(TipoSolicitud.codigo).filter(
+        TipoSolicitud.id_tipo_solicitud == solicitud.id_tipo_solicitud
+    ).scalar()
+
+    return SolicitudResponse(
+        id_solicitud=solicitud.id_solicitud,
+        id_tipo_solicitud=solicitud.id_tipo_solicitud,
+        tipo_codigo=tipo_codigo or "",
+        id_alumno=solicitud.id_alumno,
+        id_detalle_origen=solicitud.id_detalle_origen,
+        estado=solicitud.estado,
+        motivo=solicitud.motivo,
+        motivo_rechazo=solicitud.motivo_rechazo,
+        created_at=solicitud.created_at,
+        updated_at=solicitud.updated_at,
+        documentos=_build_docs_response(solicitud.documentos, db),
+        incorporacion=SolicitudIncorporacionResponse.model_validate(solicitud.incorporacion) if solicitud.incorporacion else None,
+        migracion=SolicitudMigracionResponse.model_validate(solicitud.migracion) if solicitud.migracion else None,
+    )
+
+
+@router.patch("/{id_solicitud}/documentos/{id_doc}/quitar", response_model=SolicitudResponse)
+def quitar_documento(
+    id_solicitud: int,
+    id_doc: int,
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(require_permiso("alumnos.editar")),
+):
+    solicitud = db.query(Solicitud).options(
+        joinedload(Solicitud.documentos),
+        joinedload(Solicitud.incorporacion),
+        joinedload(Solicitud.migracion),
+    ).filter(
+        Solicitud.id_solicitud == id_solicitud
+    ).first()
+    if not solicitud:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+
+    if solicitud.estado != "pendiente":
+        raise HTTPException(status_code=400, detail="Solo se pueden modificar documentos de solicitudes pendientes")
+
+    doc = next((d for d in solicitud.documentos if d.id_solicitud_documento == id_doc), None)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado en esta solicitud")
+
+    doc.url_documento = None
+    doc.estado = "pendiente"
+    doc.fecha_entrega = None
     db.commit()
     db.refresh(solicitud)
 
