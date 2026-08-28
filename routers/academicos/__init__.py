@@ -5,6 +5,7 @@ from .modulos import router as modulos_router
 from .detalle_programa_modulo import router as detalle_programa_modulo_router
 from .horarios import router as horarios_router
 from .modalidades import router as modalidades_router
+from .carreras import router as carreras_router
 from .tipo_programa import router as tipo_programa_router
 from .tipo_descuento import router as tipo_descuento_router
 from .requisitos import router as requisitos_router

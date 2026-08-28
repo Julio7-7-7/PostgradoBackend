@@ -5,7 +5,7 @@ from routers.personas import usuarios, roles, persona
 from routers.academicos import (
     programas, programa_version, programa_version_edicion,
     modulos, detalle_programa_modulo, horarios, modalidades,
-    tipo_programa, tipo_descuento, requisitos,
+    tipo_programa, tipo_descuento, requisitos, carreras,
 )
 from routers.inscripciones import (
     detalle_alumno, solicitudes, documentos,
@@ -35,6 +35,7 @@ all_routers = [
     programa_version.router,
     modulos.router,
     modalidades.router,
+    carreras.router,
     programa_version_edicion.router,
     detalle_programa_modulo.router,
     horarios.router,

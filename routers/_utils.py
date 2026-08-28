@@ -138,6 +138,39 @@ def esta_en_plazo_notas(fecha_fin: date, ventana: int = 5) -> bool:
 from models.detalle_programa_modulo import DetalleProgramaModulo
 
 
+def validar_carrera_modalidad(
+    id_modalidad_academica: int,
+    id_carrera: int | None,
+    db: Session,
+) -> None:
+    """Carrera obligatoria para la modalidad 'Educación Continua'.
+    Si se envía id_carrera, debe existir y estar activa."""
+    from models.carrera import Carrera
+    from models.modalidad_academica import ModalidadAcademica
+
+    modalidad = db.query(ModalidadAcademica).filter(
+        ModalidadAcademica.id_modalidad_academica == id_modalidad_academica
+    ).first()
+    if not modalidad:
+        raise HTTPException(status_code=404, detail="Modalidad académica no encontrada")
+
+    es_educacion_continua = modalidad.nombre_modalidad.strip().lower() == "educación continua"
+
+    if id_carrera is None:
+        if es_educacion_continua:
+            raise HTTPException(
+                status_code=400,
+                detail="La modalidad 'Educación Continua' requiere especificar la carrera de origen",
+            )
+        return
+
+    carrera = db.query(Carrera).filter(Carrera.id_carrera == id_carrera).first()
+    if not carrera:
+        raise HTTPException(status_code=404, detail="Carrera no encontrada")
+    if carrera.estado != "activo":
+        raise HTTPException(status_code=400, detail="La carrera no está activa")
+
+
 def resolver_modulo_inicio(id_pve: int, id_modulo_inicio: int | None, db: Session) -> tuple[int | None, int]:
     if id_modulo_inicio:
         dpm = db.query(DetalleProgramaModulo).filter(

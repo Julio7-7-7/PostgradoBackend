@@ -4,6 +4,7 @@ from enum import Enum
 from pydantic import BaseModel, ConfigDict, field_validator
 from schemas.alumno import AlumnoResponse
 from schemas.modalidad_academica import ModalidadAcademicaResponse
+from schemas.carrera import CarreraResponse
 from schemas.programa_version_edicion import ProgramaVersionEdicionResponse
 from schemas.tipo_descuento import TipoDescuentoResponse
 from schemas.control_documentacion import ControlDocumentacionResponse
@@ -21,6 +22,7 @@ class DetalleProgramaAlumnoBase(BaseModel):
     id_programa_version_edicion: int
     id_alumno: int
     id_modalidad_academica: int
+    id_carrera: int | None = None
     id_tipo_descuento: int | None = None
     descuento_aplicado: Decimal = Decimal("0.00")
     id_modulo_inicio: int | None = None
@@ -40,6 +42,7 @@ class DetalleProgramaAlumnoCreate(DetalleProgramaAlumnoBase):
     pass
 
 class DetalleProgramaAlumnoUpdate(BaseModel):
+    id_carrera: int | None = None
     id_tipo_descuento: int | None = None
     id_modulo_inicio: int | None = None
     modulo_inicio: int | None = None
@@ -50,6 +53,7 @@ class DetalleProgramaAlumnoResponse(DetalleProgramaAlumnoBase):
     id_detalle_programa_alumno: int
     alumno: AlumnoResponse
     modalidad_academica: ModalidadAcademicaResponse
+    carrera: CarreraResponse | None = None
     programa_version_edicion: ProgramaVersionEdicionResponse | None = None
     tipo_descuento: TipoDescuentoResponse | None = None
     control_documentacion: list[ControlDocumentacionResponse] = []
@@ -72,6 +76,7 @@ class InscripcionEdicionItem(BaseModel):
     alumno: AlumnoBasico
     estado: str
     modalidad: str
+    carrera: str | None = None
     descuento_aplicado: float
     tipo_descuento: str | None = None
     id_modulo_inicio: int | None = None

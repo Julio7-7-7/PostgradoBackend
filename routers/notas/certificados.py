@@ -2,14 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
-from dependencies import get_current_user
+from dependencies import get_current_user, require_permiso
 from models.certificado_notas import CertificadoNotas
 from models.alumno import Alumno
-from models.detalle_programa_alumno import DetalleProgramaAlumno
 from models.programa_version_edicion import ProgramaVersionEdicion
-from models.nota import Nota
-from models.detalle_programa_modulo import DetalleProgramaModulo
-from models.modulo import Modulo
 from schemas.auth import UserResponse
 
 router = APIRouter(
@@ -19,7 +15,7 @@ router = APIRouter(
 )
 
 
-def _serializar_certificado(cert, alumno=None, edicion=None, notas=None) -> dict:
+def _serializar_certificado(cert, alumno=None, edicion=None, programa=None) -> dict:
     return {
         "id_certificado": cert.id_certificado,
         "id_alumno": cert.id_alumno,
@@ -33,66 +29,43 @@ def _serializar_certificado(cert, alumno=None, edicion=None, notas=None) -> dict
             "ci": alumno.ci if alumno else None,
         } if alumno else None,
         "edicion": {
-            "programa": None,
+            "programa": programa.nombre_programa if programa else None,
             "edicion": edicion.edicion if edicion else None,
             "anio": edicion.anio if edicion else None,
             "semestre": edicion.semestre if edicion else None,
         } if edicion else None,
-        "notas": notas or [],
     }
 
 
-@router.get("/mis-certificados/{id_alumno}")
-def mis_certificados(
-    id_alumno: int,
+@router.get("/por-informe/{id_informe}")
+def certificados_por_informe(
+    id_informe: int,
     db: Session = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user),
+    current_user: UserResponse = Depends(require_permiso("pagos.ver")),
 ):
-    es_el_alumno = current_user.profile_type == "alumno" and current_user.id_profile == id_alumno
-    if not es_el_alumno:
-        if not any(p.codigo == "pagos.ver" for p in current_user.permisos):
-            raise HTTPException(status_code=403, detail="No tenés permiso para ver certificados")
-
     certificados = db.query(CertificadoNotas).filter(
-        CertificadoNotas.id_alumno == id_alumno
-    ).order_by(CertificadoNotas.created_at.desc()).all()
+        CertificadoNotas.id_informe == id_informe
+    ).order_by(CertificadoNotas.id_certificado).all()
+
+    alumno_ids = {c.id_alumno for c in certificados}
+    alumnos_map = {
+        a.id_alumno: a
+        for a in db.query(Alumno).filter(Alumno.id_alumno.in_(alumno_ids)).all()
+    } if alumno_ids else {}
 
     resultado = []
     for cert in certificados:
-        alumno = db.query(Alumno).filter(Alumno.id_alumno == cert.id_alumno).first()
         edicion = db.query(ProgramaVersionEdicion).filter(
             ProgramaVersionEdicion.id_programa_version_edicion == cert.id_programa_version_edicion
         ).first()
+        programa = None
+        if edicion and edicion.programa_version:
+            programa = edicion.programa_version.programa
+        resultado.append(_serializar_certificado(
+            cert,
+            alumnos_map.get(cert.id_alumno),
+            edicion,
+            programa,
+        ))
 
-        dpa = db.query(DetalleProgramaAlumno).filter(
-            DetalleProgramaAlumno.id_alumno == id_alumno,
-            DetalleProgramaAlumno.id_programa_version_edicion == cert.id_programa_version_edicion,
-        ).first()
-
-        notas_data = []
-        if dpa:
-            notas = db.query(Nota).filter(
-                Nota.id_detalle_programa_alumno == dpa.id_detalle_programa_alumno
-            ).all()
-            for n in notas:
-                dpm = db.query(DetalleProgramaModulo).filter(
-                    DetalleProgramaModulo.id_detalle_programa_modulo == n.id_detalle_programa_modulo
-                ).first()
-                mod = db.query(Modulo).filter(
-                    Modulo.id_modulo == dpm.id_modulo
-                ).first() if dpm else None
-                notas_data.append({
-                    "modulo": mod.nombre_modulo if mod else "N/A",
-                    "sigla": mod.sigla if mod else "",
-                    "nota": float(n.nota),
-                    "orden": dpm.orden if dpm else 0,
-                })
-            notas_data.sort(key=lambda x: x["orden"])
-
-        pv = edicion.programa_version if edicion else None
-        prog = pv.programa if pv else None
-        resultado.append(_serializar_certificado(cert, alumno, edicion, notas_data))
-        if resultado:
-            resultado[-1]["edicion"]["programa"] = prog.nombre_programa if prog else None
-
-    return {"id_alumno": id_alumno, "certificados": resultado}
+    return {"id_informe": id_informe, "certificados": resultado}

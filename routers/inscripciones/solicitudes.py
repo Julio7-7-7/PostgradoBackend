@@ -18,6 +18,8 @@ from models.alumno import Alumno
 from models.requisito import Requisito
 from models.control_documentacion import ControlDocumentacion
 from models.historial_inscripcion import HistorialInscripcion
+from models.modalidad_academica import ModalidadAcademica
+from routers._utils import resolver_modulo_inicio, validar_carrera_modalidad
 from schemas.solicitud import (
     SolicitudCreate,
     SolicitudAdminCreate,
@@ -383,6 +385,15 @@ def crear_admin(
     db: Session = Depends(get_db),
     current_user: UserResponse = Depends(require_permiso("alumnos.editar")),
 ):
+    from routers.inscripciones.detalle_alumno import (
+        validar_modalidad_programa,
+        _validar_no_inscripcion_programa,
+        _validar_cupo,
+        _validar_descuento,
+        generar_control_documentacion,
+        generar_control_descuento,
+    )
+
     pve = db.query(ProgramaVersionEdicion).filter(
         ProgramaVersionEdicion.id_programa_version_edicion == data.id_programa_version_edicion
     ).first()
@@ -398,22 +409,82 @@ def crear_admin(
     if not alumno:
         raise HTTPException(status_code=404, detail="Alumno no encontrado")
 
-    from routers.inscripciones.detalle_alumno import validar_modalidad_programa
-
     validar_modalidad_programa(data.id_modalidad_academica, data.id_programa_version_edicion, db)
+    validar_carrera_modalidad(data.id_modalidad_academica, data.id_carrera, db)
+
+    es_en_curso = pve.estado == "en_curso"
+
+    if not es_en_curso:
+        existente = db.query(DetalleProgramaAlumno).filter(
+            DetalleProgramaAlumno.id_alumno == data.id_alumno,
+            DetalleProgramaAlumno.id_programa_version_edicion == data.id_programa_version_edicion,
+        ).first()
+        if existente:
+            raise HTTPException(status_code=400, detail="Ya existe una inscripción de este alumno en esta edición")
+
+        _validar_no_inscripcion_programa(data.id_alumno, data.id_programa_version_edicion, db)
+        _validar_cupo(data.id_programa_version_edicion, db)
+
+        descuento_aplicado = 0.0
+        if data.id_tipo_descuento:
+            td = _validar_descuento(data.id_tipo_descuento, data.id_modalidad_academica, data.id_alumno, db)
+            descuento_aplicado = td.porcentaje
+
+        id_mod, mod_orden = resolver_modulo_inicio(
+            data.id_programa_version_edicion, data.id_modulo_inicio, db
+        )
+        if not id_mod:
+            id_mod = None
+            mod_orden = 1
+
+        nuevo = DetalleProgramaAlumno(
+            id_programa_version_edicion=data.id_programa_version_edicion,
+            id_alumno=data.id_alumno,
+            id_modalidad_academica=data.id_modalidad_academica,
+            id_carrera=data.id_carrera,
+            id_tipo_descuento=data.id_tipo_descuento,
+            descuento_aplicado=descuento_aplicado,
+            id_modulo_inicio=id_mod,
+            modulo_inicio=mod_orden,
+            estado="postulante",
+            es_incorporacion=False,
+            fecha_inscripcion=date.today(),
+        )
+        db.add(nuevo)
+        db.flush()
+
+        generar_control_documentacion(nuevo.id_detalle_programa_alumno, data.id_modalidad_academica, db)
+        if data.id_tipo_descuento:
+            generar_control_descuento(nuevo.id_detalle_programa_alumno, data.id_modalidad_academica, data.id_tipo_descuento, db)
+
+        db.commit()
+        db.refresh(nuevo)
+
+        return SolicitudConDetalle(
+            tipo_creacion="directa",
+            id_solicitud=None,
+            id_tipo_solicitud=0,
+            tipo_codigo="inscripcion",
+            id_alumno=data.id_alumno,
+            estado="postulante",
+            motivo="Inscripción directa desde administración",
+            created_at=nuevo.created_at,
+            documentos=[],
+            alumno_nombre=alumno.nombre,
+            alumno_apellido=alumno.apellido,
+            alumno_ci=alumno.ci,
+            id_detalle_programa_alumno=nuevo.id_detalle_programa_alumno,
+        )
 
     tipo = db.query(TipoSolicitud).filter(TipoSolicitud.codigo == "incorporacion").first()
     if not tipo:
         raise HTTPException(status_code=400, detail="Tipo de solicitud 'incorporacion' no encontrado en el sistema")
 
-    es_en_curso = pve.estado == "en_curso"
-    motivo_base = "Incorporación" if es_en_curso else "Inscripción"
-
     solicitud = Solicitud(
         id_tipo_solicitud=tipo.id_tipo_solicitud,
         id_alumno=data.id_alumno,
         estado="pendiente",
-        motivo=data.motivo or f"{motivo_base} directa desde administración",
+        motivo=data.motivo or "Incorporación directa desde administración",
     )
     db.add(solicitud)
     db.flush()
@@ -433,6 +504,7 @@ def crear_admin(
     db.refresh(solicitud)
 
     return SolicitudConDetalle(
+        tipo_creacion="solicitud",
         id_solicitud=solicitud.id_solicitud,
         id_tipo_solicitud=solicitud.id_tipo_solicitud,
         tipo_codigo="incorporacion",
@@ -645,6 +717,7 @@ def aprobar(
         from routers.inscripciones.detalle_alumno import _validar_cupo, validar_modalidad_programa
 
         validar_modalidad_programa(inc.id_modalidad_academica, pve.id_programa_version_edicion, db)
+        validar_carrera_modalidad(inc.id_modalidad_academica, data.id_carrera, db)
         _validar_cupo(pve.id_programa_version_edicion, db)
 
         descuento_aplicado = 0.0
@@ -661,6 +734,7 @@ def aprobar(
             id_programa_version_edicion=inc.id_programa_version_edicion,
             id_alumno=solicitud.id_alumno,
             id_modalidad_academica=inc.id_modalidad_academica,
+            id_carrera=data.id_carrera,
             id_tipo_descuento=inc.id_tipo_descuento,
             descuento_aplicado=descuento_aplicado,
             id_modulo_inicio=id_mod,
@@ -743,6 +817,8 @@ def aprobar(
                 )
 
         modalidad_heredada = dpa_origen.id_modalidad_academica
+        carrera_heredada = dpa_origen.id_carrera
+        validar_carrera_modalidad(modalidad_heredada, carrera_heredada, db)
         _validar_cupo(data.id_programa_version_edicion, db)
 
         descuento_aplicado = 0.0
@@ -759,6 +835,7 @@ def aprobar(
             id_programa_version_edicion=data.id_programa_version_edicion,
             id_alumno=solicitud.id_alumno,
             id_modalidad_academica=modalidad_heredada,
+            id_carrera=carrera_heredada,
             id_tipo_descuento=data.id_tipo_descuento,
             descuento_aplicado=descuento_aplicado,
             id_modulo_inicio=id_mod,
@@ -909,8 +986,11 @@ def subir_documento(
     db: Session = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user),
 ):
-    if current_user.profile_type != "alumno" or not current_user.id_profile:
-        raise HTTPException(status_code=400, detail="El usuario actual no es un alumno")
+    es_admin = any(p.codigo == "alumnos.editar" for p in current_user.permisos)
+    es_alumno = current_user.profile_type == "alumno" and current_user.id_profile
+
+    if not es_admin and not es_alumno:
+        raise HTTPException(status_code=400, detail="No tienes permiso para subir documentos")
 
     solicitud = db.query(Solicitud).options(
         joinedload(Solicitud.documentos),
@@ -925,7 +1005,7 @@ def subir_documento(
     if solicitud.estado != "pendiente":
         raise HTTPException(status_code=400, detail="Solo se pueden subir documentos a solicitudes pendientes")
 
-    if solicitud.id_alumno != current_user.id_profile:
+    if not es_admin and solicitud.id_alumno != current_user.id_profile:
         raise HTTPException(status_code=403, detail="Esta solicitud no te pertenece")
 
     doc = next((d for d in solicitud.documentos if d.id_solicitud_documento == id_doc), None)
@@ -940,6 +1020,57 @@ def subir_documento(
     doc.url_documento = url
     doc.estado = "entregado"
     doc.fecha_entrega = date.today()
+    db.commit()
+    db.refresh(solicitud)
+
+    tipo_codigo = db.query(TipoSolicitud.codigo).filter(
+        TipoSolicitud.id_tipo_solicitud == solicitud.id_tipo_solicitud
+    ).scalar()
+
+    return SolicitudResponse(
+        id_solicitud=solicitud.id_solicitud,
+        id_tipo_solicitud=solicitud.id_tipo_solicitud,
+        tipo_codigo=tipo_codigo or "",
+        id_alumno=solicitud.id_alumno,
+        id_detalle_origen=solicitud.id_detalle_origen,
+        estado=solicitud.estado,
+        motivo=solicitud.motivo,
+        motivo_rechazo=solicitud.motivo_rechazo,
+        created_at=solicitud.created_at,
+        updated_at=solicitud.updated_at,
+        documentos=_build_docs_response(solicitud.documentos, db),
+        incorporacion=SolicitudIncorporacionResponse.model_validate(solicitud.incorporacion) if solicitud.incorporacion else None,
+        migracion=SolicitudMigracionResponse.model_validate(solicitud.migracion) if solicitud.migracion else None,
+    )
+
+
+@router.patch("/{id_solicitud}/documentos/{id_doc}/quitar", response_model=SolicitudResponse)
+def quitar_documento(
+    id_solicitud: int,
+    id_doc: int,
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(require_permiso("alumnos.editar")),
+):
+    solicitud = db.query(Solicitud).options(
+        joinedload(Solicitud.documentos),
+        joinedload(Solicitud.incorporacion),
+        joinedload(Solicitud.migracion),
+    ).filter(
+        Solicitud.id_solicitud == id_solicitud
+    ).first()
+    if not solicitud:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+
+    if solicitud.estado != "pendiente":
+        raise HTTPException(status_code=400, detail="Solo se pueden modificar documentos de solicitudes pendientes")
+
+    doc = next((d for d in solicitud.documentos if d.id_solicitud_documento == id_doc), None)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado en esta solicitud")
+
+    doc.url_documento = None
+    doc.estado = "pendiente"
+    doc.fecha_entrega = None
     db.commit()
     db.refresh(solicitud)
 

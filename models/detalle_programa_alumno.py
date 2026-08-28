@@ -10,6 +10,7 @@ class DetalleProgramaAlumno(Base):
     id_programa_version_edicion = Column(Integer, ForeignKey("programa_version_edicion.id_programa_version_edicion"), nullable=False)
     id_alumno = Column(Integer, ForeignKey("alumnos.id_alumno"), nullable=False)
     id_modalidad_academica = Column(Integer, ForeignKey("modalidades_academicas.id_modalidad_academica"), nullable=False)
+    id_carrera = Column(Integer, ForeignKey("carreras.id_carrera"), nullable=True)
     id_tipo_descuento = Column(Integer, ForeignKey("tipos_descuento.id_tipo_descuento"), nullable=True)
     descuento_aplicado = Column(Numeric(5, 2), nullable=False, default=0.0)
     id_modulo_inicio = Column(
@@ -26,6 +27,7 @@ class DetalleProgramaAlumno(Base):
 
     alumno = relationship("Alumno", back_populates="detalles_alumno")
     modalidad_academica = relationship("ModalidadAcademica", back_populates="detalles_alumno")
+    carrera = relationship("Carrera", back_populates="detalles_alumno")
     tipo_descuento = relationship("TipoDescuento", back_populates="detalles_alumno")
     programa_version_edicion = relationship("ProgramaVersionEdicion", back_populates="detalles_alumno")
     modulo_inicio_rel = relationship(
