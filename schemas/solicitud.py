@@ -13,6 +13,7 @@ class SolicitudCreate(BaseModel):
 
 class AprobarSolicitudRequest(BaseModel):
     id_programa_version_edicion: int | None = None
+    id_carrera: int | None = None
     id_tipo_descuento: int | None = None
     id_modulo_inicio: int | None = None
     motivo: str = ""
@@ -22,6 +23,7 @@ class SolicitudAdminCreate(BaseModel):
     id_alumno: int
     id_programa_version_edicion: int
     id_modalidad_academica: int
+    id_carrera: int | None = None
     id_tipo_descuento: int | None = None
     id_modulo_inicio: int | None = None
     motivo: str | None = None
@@ -74,7 +76,8 @@ class SolicitudResponse(BaseModel):
 
 
 class SolicitudConDetalle(BaseModel):
-    id_solicitud: int
+    tipo_creacion: str = "solicitud"
+    id_solicitud: int | None = None
     id_tipo_solicitud: int
     tipo_codigo: str = ""
     id_alumno: int | None = None
@@ -85,6 +88,7 @@ class SolicitudConDetalle(BaseModel):
     motivo: str | None = None
     motivo_rechazo: str | None = None
     id_detalle_origen: int | None = None
+    id_detalle_programa_alumno: int | None = None
     edicion_numero: int | None = None
     edicion_anio: int | None = None
     edicion_semestre: int | None = None

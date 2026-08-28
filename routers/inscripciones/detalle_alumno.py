@@ -21,7 +21,7 @@ from schemas.detalle_programa_alumno import (
 )
 from schemas.admin import AutoInscribirRequest
 from schemas.auth import UserResponse
-from routers._utils import resolver_modulo_inicio
+from routers._utils import resolver_modulo_inicio, validar_carrera_modalidad
 
 router = APIRouter(
     prefix="/detalle-programa-alumno",
@@ -237,6 +237,7 @@ def _cargar_con_relations(query):
     return query.options(
         joinedload(DetalleProgramaAlumno.alumno),
         joinedload(DetalleProgramaAlumno.modalidad_academica),
+        joinedload(DetalleProgramaAlumno.carrera),
         joinedload(DetalleProgramaAlumno.programa_version_edicion),
         joinedload(DetalleProgramaAlumno.tipo_descuento),
         joinedload(DetalleProgramaAlumno.control_documentacion).joinedload(ControlDocumentacion.requisito),
@@ -254,6 +255,7 @@ def crear(data: DetalleProgramaAlumnoCreate, db: Session = Depends(get_db), curr
         raise HTTPException(status_code=400, detail="La modalidad académica no está activa")
 
     validar_modalidad_programa(data.id_modalidad_academica, data.id_programa_version_edicion, db)
+    validar_carrera_modalidad(data.id_modalidad_academica, data.id_carrera, db)
 
     existente = db.query(DetalleProgramaAlumno).filter(
         DetalleProgramaAlumno.id_alumno == data.id_alumno,
@@ -352,6 +354,7 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
         raise HTTPException(status_code=400, detail="La modalidad académica no está activa")
 
     validar_modalidad_programa(data.id_modalidad_academica, data.id_programa_version_edicion, db)
+    validar_carrera_modalidad(data.id_modalidad_academica, data.id_carrera, db)
 
     _validar_cupo(data.id_programa_version_edicion, db)
 
@@ -372,6 +375,7 @@ def auto_inscribir(data: AutoInscribirRequest, db: Session = Depends(get_db), cu
         id_programa_version_edicion=data.id_programa_version_edicion,
         id_alumno=current_user.id_profile,
         id_modalidad_academica=data.id_modalidad_academica,
+        id_carrera=data.id_carrera,
         id_tipo_descuento=data.id_tipo_descuento,
         descuento_aplicado=descuento_aplicado,
         id_modulo_inicio=id_mod,
@@ -438,6 +442,7 @@ def inscripciones_por_edicion(
 
     alumno_ids = {r.id_alumno for r in registros}
     modalidad_ids = {r.id_modalidad_academica for r in registros}
+    carrera_ids = {r.id_carrera for r in registros if r.id_carrera}
     td_ids = {r.id_tipo_descuento for r in registros if r.id_tipo_descuento}
     reg_ids = [r.id_detalle_programa_alumno for r in registros]
 
@@ -452,6 +457,12 @@ def inscripciones_por_edicion(
             ModalidadAcademica.id_modalidad_academica.in_(modalidad_ids)
         ).all()
     } if modalidad_ids else {}
+
+    from models.carrera import Carrera
+    carreras_map = {
+        c.id_carrera: c
+        for c in db.query(Carrera).filter(Carrera.id_carrera.in_(carrera_ids)).all()
+    } if carrera_ids else {}
 
     td_map = {
         t.id_tipo_descuento: t
@@ -470,6 +481,7 @@ def inscripciones_por_edicion(
     for reg in registros:
         alumno = alumnos_map.get(reg.id_alumno)
         modalidad = modalidades_map.get(reg.id_modalidad_academica)
+        carrera = carreras_map.get(reg.id_carrera) if reg.id_carrera else None
         tipo_desc = td_map.get(reg.id_tipo_descuento) if reg.id_tipo_descuento else None
         controles = controles_por_detalle.get(reg.id_detalle_programa_alumno, [])
         docs_ok = sum(1 for c in controles if c.estado == "aceptado")
@@ -485,6 +497,7 @@ def inscripciones_por_edicion(
             ) if alumno else AlumnoBasico(id_alumno=0, nombre="N/A", apellido="", ci=None, correo=None),
             estado=reg.estado,
             modalidad=modalidad.nombre_modalidad if modalidad else "N/A",
+            carrera=carrera.nombre if carrera else None,
             descuento_aplicado=float(reg.descuento_aplicado) if reg.descuento_aplicado else 0,
             tipo_descuento=tipo_desc.nombre if tipo_desc else None,
             id_modulo_inicio=reg.id_modulo_inicio,
