@@ -8,6 +8,7 @@ from database import get_db
 from dependencies import get_current_user, require_permiso
 from models.informe_notas import InformeNotas
 from models.certificado_notas import CertificadoNotas
+from models.usuario import Usuario
 from schemas.auth import UserResponse
 from schemas.informe_notas import InformeNotasRequest
 from routers.notas._builder_informes import (
@@ -33,6 +34,8 @@ def _serializar_informe(informe: InformeNotas, cert_count: int = 0) -> dict:
         "observaciones": informe.observaciones,
         "contenido": informe.contenido,
         "certificados_count": cert_count,
+        "emitido_por": informe.emitido_por,
+        "emitido_por_nombre": informe.emitido_por_nombre,
         "created_at": informe.created_at.isoformat() if informe.created_at else None,
         "updated_at": informe.updated_at.isoformat() if informe.updated_at else None,
     }
@@ -51,21 +54,16 @@ def _certificados_por_informe(db: Session, id_informe: int) -> int:
     ).count()
 
 
-@router.post("/preview")
-def preview_informe(
-    data: InformeNotasRequest,
-    db: Session = Depends(get_db),
-    current_user: UserResponse = Depends(require_permiso("pagos.ver")),
-):
-    contenido = armar_contenido(db, data)
-    pve, _, _ = resolver_edicion(db, data.id_programa_version_edicion)
-    return {
-        **contenido,
-        "numero_tanda": _siguiente_tanda(db, data.id_programa_version_edicion),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "es_borrador": True,
-        "edicion_estado": pve.estado,
-    }
+def _nombre_usuario(db: Session, id_usuario: int) -> str | None:
+    """Nombre y apellido de la persona asociada al usuario (administrativo, docente o alumno)."""
+    usuario = db.query(Usuario).filter(Usuario.id_usuario == id_usuario).first()
+    if not usuario:
+        return None
+    for perfil in (usuario.administrativo, usuario.docente, usuario.alumno):
+        if perfil:
+            nombre = f"{perfil.apellido}, {perfil.nombre}".strip(", ")
+            return nombre if nombre else None
+    return None
 
 
 @router.post("/", status_code=201)
@@ -92,9 +90,10 @@ def generar_informe(
     alumnos_ids = sorted({
         a["id_alumno"]
         for c in contenido["carreras"]
-        for m in c["modulos"]
-        for a in m["alumnos"]
+        for a in c["matriz_filas"]
     })
+
+    emitido_por_nombre = _nombre_usuario(db, current_user.id_usuario)
 
     informe = InformeNotas(
         id_programa_version_edicion=data.id_programa_version_edicion,
@@ -105,6 +104,8 @@ def generar_informe(
         alumnos_ids=alumnos_ids,
         contenido=contenido,
         estado="enviado",
+        emitido_por=current_user.id_usuario,
+        emitido_por_nombre=emitido_por_nombre,
     )
     db.add(informe)
     db.flush()
@@ -154,13 +155,12 @@ def _siguiente_numero_certificado(db: Session, id_edicion: int) -> int:
 
 
 def _elegibles_final(db: Session, id_edicion: int, contenido: dict, dpas_map: dict) -> list[int]:
+    """Alumnos que reciben certificado con el informe final (cruza la matriz congelada)."""
     dpas = [d for d in dpas_map.values()
             if d.estado in ("inscrito", "incorporado", "finalizado", "graduado")]
     if not dpas:
         return []
     nota_map = {}
-    import textwrap
-    # construir mapa desde el contenido congelado (matriz por carrera)
     for c in contenido["carreras"]:
         for f in c["matriz_filas"]:
             id_dpa = f["id_detalle_programa_alumno"]
@@ -206,38 +206,3 @@ def obtener_informe(
     if not informe:
         raise HTTPException(status_code=404, detail="Informe no encontrado")
     return _serializar_informe(informe, _certificados_por_informe(db, id_informe))
-
-
-@router.get("/elegibles/{id_edicion}")
-def alumnos_elegibles(
-    id_edicion: int,
-    db: Session = Depends(get_db),
-    current_user: UserResponse = Depends(require_permiso("pagos.ver")),
-):
-    pve, _, _ = resolver_edicion(db, id_edicion)
-    dpas = _dpas_por_edicion(db, id_edicion)
-    dpas = [d for d in dpas if d.estado in ("inscrito", "incorporado", "finalizado", "graduado")]
-    nota_map = {}
-    from models.nota import Nota
-    for n in db.query(Nota).filter(Nota.id_detalle_programa_alumno.in_(
-        [d.id_detalle_programa_alumno for d in dpas]
-    )).all():
-        nota_map[(n.id_detalle_programa_alumno, n.id_detalle_programa_modulo)] = float(n.nota)
-    from models.detalle_programa_modulo import DetalleProgramaModulo
-    all_dmps = [d.id_detalle_programa_modulo for d in db.query(DetalleProgramaModulo).filter(
-        DetalleProgramaModulo.id_programa_version_edicion == id_edicion
-    ).all()]
-    eleg = calcular_elegibilidad(db, id_edicion, dpas, nota_map, all_dmps)
-    resultado = []
-    for d in dpas:
-        det = eleg.get(d.id_detalle_programa_alumno, {})
-        resultado.append({
-            "id_alumno": d.id_alumno,
-            "id_detalle_programa_alumno": d.id_detalle_programa_alumno,
-            "nombre": d.alumno.nombre,
-            "apellido": d.alumno.apellido,
-            "ci": d.alumno.ci,
-            "elegible": det.get("elegible", False),
-            "motivo_exclusion": det.get("motivo_exclusion"),
-        })
-    return {"id_programa_version_edicion": id_edicion, "total_elegibles": sum(1 for r in resultado if r["elegible"]), "alumnos": resultado}

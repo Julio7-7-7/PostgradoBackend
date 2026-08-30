@@ -153,7 +153,7 @@ def elegibles_certificados(
             "carrera": d.carrera.nombre if d.carrera else None,
             "educacion_continua": _es_educacion_continua(d),
             "elegible": det.get("elegible", False),
-            "motivo_exclusion": det.get("motivo_exclusion"),
+            "estado": det.get("estado"),
         })
     return {"id_programa_version_edicion": id_edicion, "alumnos": resultado}
 
@@ -200,7 +200,7 @@ def emitir_certificados(
             continue
         det = eleg.get(d.id_detalle_programa_alumno, {})
         if not det.get("elegible", False):
-            omitidos.append({"id_alumno": id_alumno, "motivo": det.get("motivo_exclusion") or "no elegible"})
+            omitidos.append({"id_alumno": id_alumno, "motivo": det.get("estado") or "no elegible"})
             continue
 
         cert = CertificadoNotas(
