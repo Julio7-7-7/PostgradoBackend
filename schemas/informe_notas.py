@@ -10,6 +10,11 @@ class InformeNotasRequest(BaseModel):
     id_carrera: int | None = None
 
 
+class CertificadoEmitirRequest(BaseModel):
+    id_programa_version_edicion: int
+    alumnos_ids: list[int]
+
+
 class InformeAlumnoNota(BaseModel):
     id_alumno: int
     id_detalle_programa_alumno: int

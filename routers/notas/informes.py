@@ -1,6 +1,7 @@
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -10,7 +11,7 @@ from models.certificado_notas import CertificadoNotas
 from schemas.auth import UserResponse
 from schemas.informe_notas import InformeNotasRequest
 from routers.notas._builder_informes import (
-    armar_contenido, resolver_edicion, calcular_elegibilidad,
+    armar_contenido, resolver_edicion, calcular_elegibilidad, datos_certificado,
 )
 
 router = APIRouter(
@@ -113,13 +114,23 @@ def generar_informe(
         pve, _, _ = resolver_edicion(db, data.id_programa_version_edicion)
         dpas = {d.id_alumno: d for d in _dpas_por_edicion(db, data.id_programa_version_edicion)}
         elegibles = _elegibles_final(db, data.id_programa_version_edicion, contenido, dpas)
+        numero = _siguiente_numero_certificado(db, data.id_programa_version_edicion)
+        now = datetime.now(timezone.utc)
         for alumno_id in elegibles:
             db.add(CertificadoNotas(
                 id_alumno=alumno_id,
                 id_programa_version_edicion=data.id_programa_version_edicion,
                 id_informe=informe.id_informe,
                 fecha_emision=date.today(),
+                datos=datos_certificado(db, data.id_programa_version_edicion, alumno_id),
+                procedencia="informe",
+                emitido_por=current_user.id_usuario,
+                emitido_at=now,
+                numero_certificado=numero,
+                codigo=f"CERT-{pve.anio}-{numero:03d}",
+                n_impresiones=0,
             ))
+            numero += 1
             cert_count += 1
 
     db.commit()
@@ -132,6 +143,14 @@ def _dpas_por_edicion(db: Session, id_edicion: int):
     return db.query(DetalleProgramaAlumno).filter(
         DetalleProgramaAlumno.id_programa_version_edicion == id_edicion
     ).all()
+
+
+def _siguiente_numero_certificado(db: Session, id_edicion: int) -> int:
+    ultimo = db.query(func.max(CertificadoNotas.numero_certificado)).filter(
+        CertificadoNotas.id_programa_version_edicion == id_edicion,
+        CertificadoNotas.numero_certificado.isnot(None),
+    ).scalar()
+    return (ultimo or 0) + 1
 
 
 def _elegibles_final(db: Session, id_edicion: int, contenido: dict, dpas_map: dict) -> list[int]:

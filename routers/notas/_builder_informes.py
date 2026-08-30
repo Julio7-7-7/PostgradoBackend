@@ -12,6 +12,7 @@ from models.carrera import Carrera
 from models.contratacion_docente import ContratacionDocente
 from models.certificado_notas import CertificadoNotas
 from schemas.informe_notas import InformeNotasRequest
+from schemas.enums import clasificar_nota, redondear_nota
 
 ESTADOS_INCLUIDOS = ("inscrito", "incorporado", "finalizado", "graduado")
 
@@ -270,4 +271,51 @@ def armar_contenido(db: Session, request: InformeNotasRequest) -> dict:
             "elegibles": elegibles,
             "carreras": resumen_carreras,
         },
+    }
+
+
+def datos_certificado(db: Session, id_edicion: int, id_alumno: int) -> dict | None:
+    """Snapshot congelado del alumno en la edición para el certificado de notas."""
+    pve, pv, programa = resolver_edicion(db, id_edicion)
+    d = db.query(DetalleProgramaAlumno).filter(
+        DetalleProgramaAlumno.id_programa_version_edicion == id_edicion,
+        DetalleProgramaAlumno.id_alumno == id_alumno,
+    ).first()
+    if not d:
+        return None
+
+    dmps = modulos_edicion(db, id_edicion)
+    nota_map = {
+        n.id_detalle_programa_modulo: float(n.nota)
+        for n in db.query(Nota).filter(Nota.id_detalle_programa_alumno == d.id_detalle_programa_alumno).all()
+    }
+
+    modulos = []
+    for dpm in dmps:
+        nota = nota_map.get(dpm.id_detalle_programa_modulo)
+        modulos.append({
+            "nombre": _nombre_modulo(dpm),
+            "sigla": dpm.modulo.sigla if dpm.modulo else "",
+            "nota": nota,
+            "aprobada": nota is not None and nota >= 10,
+            "clasificacion": clasificar_nota(nota).value if nota is not None else None,
+        })
+
+    notas = [m["nota"] for m in modulos if m["nota"] is not None]
+    return {
+        "programa": programa.nombre_programa if programa else "",
+        "version": pv.version if pv else 0,
+        "edicion": pve.edicion,
+        "semestre": pve.semestre,
+        "anio": pve.anio,
+        "modalidad": d.modalidad_academica.nombre_modalidad if d.modalidad_academica else None,
+        "carrera": d.carrera.nombre if d.carrera else None,
+        "estado_alumno": d.estado,
+        "alumno": {
+            "nombre": d.alumno.nombre,
+            "apellido": d.alumno.apellido,
+            "ci": d.alumno.ci,
+        },
+        "modulos": modulos,
+        "promedio": redondear_nota(sum(notas) / len(notas)) if notas else None,
     }
