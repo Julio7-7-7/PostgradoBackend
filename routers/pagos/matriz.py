@@ -139,6 +139,7 @@ def _estado_financiero(db: Session, detalle, dpm_list: list, precio: float, matr
 
     beca_activa = True
     beca_motivo = None
+    beca_tipo = detalle.tipo_descuento.nombre if detalle.tipo_descuento else None
     notas = db.query(Nota).filter(
         Nota.id_detalle_programa_alumno == detalle.id_detalle_programa_alumno
     ).all()
@@ -256,6 +257,7 @@ def _estado_financiero(db: Session, detalle, dpm_list: list, precio: float, matr
         "otros_pagos": otros_pagos,
         "beca_activa": beca_activa,
         "beca_motivo": beca_motivo,
+        "beca_tipo": beca_tipo,
         "total_pagado": round(total_pagado, 2),
     }
 
@@ -367,6 +369,7 @@ def _serializar_fila(
         "descuento_aplicado": _descuento_porcentaje(detalle),
         "beca_activa": est["beca_activa"],
         "beca_motivo": est["beca_motivo"],
+        "beca_tipo": est["beca_tipo"],
         "matricula": {
             "esperado": est["matricula_esperado"],
             "pagado": round(est["matricula_pagado"], 2),
@@ -642,6 +645,7 @@ def transcript_pagos(
             "pct": pct,
             "beca_activa": est["beca_activa"],
             "beca_motivo": est["beca_motivo"],
+            "beca_tipo": est["beca_tipo"],
             "descuento_aplicado": _descuento_porcentaje(detalle),
         }
 
