@@ -5,6 +5,7 @@ from schemas.enums import GeneroEnum
 class AlumnoBase(BaseModel):
     ci: str | None = None
     pasaporte: str | None = None
+    numero_registro: str | None = None
     nombre: str
     apellido: str
     fecha_nacimiento: date | None = None
@@ -86,6 +87,7 @@ class AlumnoConUsuarioCreate(BaseModel):
 class AlumnoUpdate(BaseModel):
     ci: str | None = None
     pasaporte: str | None = None
+    numero_registro: str | None = None
     nombre: str | None = None
     apellido: str | None = None
     fecha_nacimiento: date | None = None

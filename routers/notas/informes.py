@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
 from dependencies import get_current_user, require_permiso
@@ -13,6 +13,7 @@ from schemas.auth import UserResponse
 from schemas.informe_notas import InformeNotasRequest
 from routers.notas._builder_informes import (
     armar_contenido, resolver_edicion, calcular_elegibilidad, datos_certificado,
+    _es_educacion_continua,
 )
 
 router = APIRouter(
@@ -62,7 +63,7 @@ def _nombre_usuario(db: Session, id_usuario: int) -> str | None:
         return None
     for perfil in (usuario.administrativo, usuario.docente, usuario.alumno):
         if perfil:
-            nombre = f"{perfil.nombre} {perfil.apellido}".strip()
+            nombre = f"{perfil.apellido} {perfil.nombre}".strip()
             return nombre if nombre else None
     return None
 
@@ -84,8 +85,6 @@ def generar_informe(
             raise HTTPException(status_code=400, detail="Informe final: la edicion no esta finalizada")
         dpas = {d.id_alumno: d for d in _dpas_por_edicion(db, data.id_programa_version_edicion)}
         elegibles = _elegibles_final(db, data.id_programa_version_edicion, contenido, dpas)
-        if not elegibles:
-            raise HTTPException(status_code=400, detail="No hay alumnos elegibles para emitir una tanda")
 
     alumnos_ids = sorted({
         a["id_alumno"]
@@ -138,7 +137,10 @@ def generar_informe(
 
 def _dpas_por_edicion(db: Session, id_edicion: int):
     from models.detalle_programa_alumno import DetalleProgramaAlumno
-    return db.query(DetalleProgramaAlumno).filter(
+    return db.query(DetalleProgramaAlumno).options(
+        joinedload(DetalleProgramaAlumno.modalidad_academica),
+        joinedload(DetalleProgramaAlumno.carrera),
+    ).filter(
         DetalleProgramaAlumno.id_programa_version_edicion == id_edicion
     ).all()
 
@@ -152,9 +154,13 @@ def _siguiente_numero_certificado(db: Session, id_edicion: int) -> int:
 
 
 def _elegibles_final(db: Session, id_edicion: int, contenido: dict, dpas_map: dict) -> list[int]:
-    """Alumnos que reciben certificado con el informe final (cruza la matriz congelada)."""
+    """Alumnos que reciben certificado con el informe final (cruza la matriz congelada).
+
+    Solo Educación Continua: los no-EC reciben su certificado por la vía individual.
+    """
     dpas = [d for d in dpas_map.values()
-            if d.estado in ("inscrito", "incorporado", "finalizado", "graduado")]
+            if d.estado in ("inscrito", "incorporado", "finalizado", "graduado")
+            and _es_educacion_continua(d)]
     if not dpas:
         return []
     nota_map = {}

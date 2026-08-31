@@ -9,6 +9,7 @@ class Alumno(Base):
     id_alumno = Column(Integer, primary_key=True, index=True, autoincrement=True)
     ci = Column(String(20), nullable=True, unique=True)
     pasaporte = Column(String(30), nullable=True, unique=True)
+    numero_registro = Column(String(30), nullable=True)
     nombre = Column(String(100), nullable=False)
     apellido = Column(String(100), nullable=False)
     fecha_nacimiento = Column(Date, nullable=True)

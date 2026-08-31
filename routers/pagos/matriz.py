@@ -72,8 +72,10 @@ def _serializar_orden(db: Session, orden: OrdenPago) -> dict:
         "estado": orden.estado,
         "motivo_anulacion": orden.motivo_anulacion,
         "anulado_por_id_usuario": orden.anulado_por_id_usuario,
+        "anulado_por": _nombre_usuario(db, orden.anulado_por_id_usuario),
         "anulado_fecha": orden.anulado_fecha.isoformat() if orden.anulado_fecha else None,
         "creado_por_id_usuario": orden.creado_por_id_usuario,
+        "creado_por": _nombre_usuario(db, orden.creado_por_id_usuario),
         "created_at": orden.created_at.isoformat() if orden.created_at else None,
         "updated_at": orden.updated_at.isoformat() if orden.updated_at else None,
         "id_transaccion": orden.transaccion.id_transaccion if orden.transaccion else None,
@@ -137,6 +139,7 @@ def _estado_financiero(db: Session, detalle, dpm_list: list, precio: float, matr
 
     beca_activa = True
     beca_motivo = None
+    beca_tipo = detalle.tipo_descuento.nombre if detalle.tipo_descuento else None
     notas = db.query(Nota).filter(
         Nota.id_detalle_programa_alumno == detalle.id_detalle_programa_alumno
     ).all()
@@ -254,6 +257,7 @@ def _estado_financiero(db: Session, detalle, dpm_list: list, precio: float, matr
         "otros_pagos": otros_pagos,
         "beca_activa": beca_activa,
         "beca_motivo": beca_motivo,
+        "beca_tipo": beca_tipo,
         "total_pagado": round(total_pagado, 2),
     }
 
@@ -365,6 +369,7 @@ def _serializar_fila(
         "descuento_aplicado": _descuento_porcentaje(detalle),
         "beca_activa": est["beca_activa"],
         "beca_motivo": est["beca_motivo"],
+        "beca_tipo": est["beca_tipo"],
         "matricula": {
             "esperado": est["matricula_esperado"],
             "pagado": round(est["matricula_pagado"], 2),
@@ -592,6 +597,7 @@ def transcript_pagos(
                     "fecha_pago": str(t.fecha_pago),
                     "monto_total": float(t.monto_total),
                     "comprobante": t.comprobante,
+                    "codigo_boleta": t.codigo_boleta,
                     "estado": t.estado,
                     "motivo_anulacion": t.motivo_anulacion,
                     "anulado_fecha": t.anulado_fecha.isoformat() if t.anulado_fecha else None,
@@ -639,6 +645,7 @@ def transcript_pagos(
             "pct": pct,
             "beca_activa": est["beca_activa"],
             "beca_motivo": est["beca_motivo"],
+            "beca_tipo": est["beca_tipo"],
             "descuento_aplicado": _descuento_porcentaje(detalle),
         }
 

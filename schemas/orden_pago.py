@@ -24,6 +24,7 @@ class OrdenPagoPreviewResponse(BaseModel):
 class OrdenPagoPagar(BaseModel):
     fecha_pago: date
     comprobante: str | None = None
+    codigo_boleta: str | None = None
 
 
 class OrdenPagoBaja(BaseModel):

@@ -62,6 +62,7 @@ class UserAdminCreate(BaseModel):
     apellido: str
     celular: str | None = None
     cargo: str | None = None
+    numero_registro: str | None = None
     fecha_nacimiento: date | None = None
     genero: str | None = None
     extension: str | None = None
