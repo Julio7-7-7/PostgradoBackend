@@ -17,6 +17,7 @@ from routers.notas._builder_informes import (
     datos_certificado,
     modulos_edicion,
     resolver_edicion,
+    _es_educacion_continua,
 )
 from schemas.auth import UserResponse
 from schemas.informe_notas import CertificadoEmitirRequest
@@ -28,15 +29,6 @@ router = APIRouter(
 )
 
 ESTADOS_INCLUIDOS = ("inscrito", "incorporado", "finalizado", "graduado")
-
-
-def _es_educacion_continua(d: DetalleProgramaAlumno) -> bool:
-    if d.id_carrera is not None:
-        return True
-    modalidad = d.modalidad_academica.nombre_modalidad if d.modalidad_academica else ""
-    return modalidad.strip().lower() == "educación continua"
-
-
 def _contexto_dpa(cert) -> dict:
     modalidad = carrera = None
     if cert.datos:
