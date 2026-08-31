@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from dependencies import get_current_user, require_permiso
 from models.detalle_programa_alumno import DetalleProgramaAlumno
+from models.orden_pago import OrdenPago
 from models.transaccion_pago import TransaccionPago
 from routers.pagos.matriz import _cargar_movimientos, _serializar_pago
 from schemas.auth import UserResponse
@@ -90,6 +91,16 @@ def anular_transaccion(
     transaccion.motivo_anulacion = motivo
     transaccion.anulado_por_id_usuario = current_user.id_usuario
     transaccion.anulado_fecha = datetime.utcnow()
+
+    if transaccion.id_orden_pago:
+        orden = db.query(OrdenPago).filter(
+            OrdenPago.id_orden_pago == transaccion.id_orden_pago
+        ).first()
+        if orden and orden.estado == "pagada":
+            orden.estado = "anulada"
+            orden.motivo_anulacion = f"Anulación automática por anulación de transacción #{id}: {motivo}"
+            orden.anulado_por_id_usuario = current_user.id_usuario
+            orden.anulado_fecha = datetime.utcnow()
 
     db.flush()
     db.commit()
