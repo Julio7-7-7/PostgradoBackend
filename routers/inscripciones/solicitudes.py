@@ -16,7 +16,6 @@ from models.programa_version import ProgramaVersion
 from models.detalle_programa_modulo import DetalleProgramaModulo
 from models.alumno import Alumno
 from models.requisito import Requisito
-from models.control_documentacion import ControlDocumentacion
 from models.historial_inscripcion import HistorialInscripcion
 from models.modalidad_academica import ModalidadAcademica
 from routers._utils import resolver_modulo_inicio, validar_carrera_modalidad
@@ -911,30 +910,14 @@ def aprobar(
         )
         db.add(historial)
 
+    # Al aprobar la solicitud se aceptan los documentos que efectivamente se subieron.
+    # Los documentos de solicitud son cartas (requisitos 6/8/7 según id_tipo_solicitud:
+    # incorporación/migración/reincorporación). No se marcan los que quedaron sin
+    # subir, y NO se traducen a control_documentacion por alumno: las cartas son
+    # control del flujo de solicitud, no parte de la documentación de la modalidad.
     for doc in solicitud.documentos:
-        doc.estado = "aceptado"
-
-    if solicitud.id_detalle_origen:
-        for doc in solicitud.documentos:
-            if not doc.url_documento:
-                continue
-            control = db.query(ControlDocumentacion).filter(
-                ControlDocumentacion.id_detalle_programa_alumno == solicitud.id_detalle_origen,
-                ControlDocumentacion.id_requisito == doc.id_requisito,
-            ).first()
-            if control:
-                control.url_documento = doc.url_documento
-                control.estado = "aceptado"
-                control.fecha_entrega = date.today()
-            else:
-                db.add(ControlDocumentacion(
-                    id_detalle_programa_alumno=solicitud.id_detalle_origen,
-                    id_requisito=doc.id_requisito,
-                    url_documento=doc.url_documento,
-                    obligatorio=True,
-                    estado="aceptado",
-                    fecha_entrega=date.today(),
-                ))
+        if doc.url_documento:
+            doc.estado = "aceptado"
 
     solicitud.estado = "aprobado"
     db.commit()
