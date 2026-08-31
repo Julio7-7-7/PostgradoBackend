@@ -98,11 +98,21 @@ def calcular_elegibilidad(db: Session, id_edicion: int, dpas: list, nota_map: di
             estado = "Completo"
             elegible = True
 
+        if not todas:
+            estado_notas = "Pendientes"
+        elif not aprobada:
+            estado_notas = "Reprobadas"
+        else:
+            estado_notas = "Aprobadas"
+        estado_pagos = "Pendiente" if d.id_detalle_programa_alumno in pagos_incompletos else "Completo"
+
         resultado[d.id_detalle_programa_alumno] = {
             "notas": notas,
             "aprobada": aprobada,
             "elegible": elegible,
             "estado": estado,
+            "estado_notas": estado_notas,
+            "estado_pagos": estado_pagos,
             "promedio": redondear_nota(sum(cargadas) / len(cargadas)) if cargadas else None,
         }
     return resultado
@@ -139,6 +149,15 @@ def armar_contenido(db: Session, request: InformeNotasRequest) -> dict:
     ).all()
     if not dpas:
         raise HTTPException(status_code=400, detail="La edicion no tiene alumnos inscritos")
+
+    dpas_retirados = []
+    if not es_final:
+        dpas_retirados = db.query(DetalleProgramaAlumno).options(
+            joinedload(DetalleProgramaAlumno.alumno)
+        ).filter(
+            DetalleProgramaAlumno.id_programa_version_edicion == request.id_programa_version_edicion,
+            DetalleProgramaAlumno.estado == "retirado",
+        ).all()
 
     dpa_ids = [d.id_detalle_programa_alumno for d in dpas]
     nota_map = {}
@@ -184,6 +203,27 @@ def armar_contenido(db: Session, request: InformeNotasRequest) -> dict:
                 "aprobada": det["aprobada"],
                 "elegible": det["elegible"],
                 "estado": det["estado"],
+                "estado_notas": det["estado_notas"],
+                "estado_pagos": det["estado_pagos"],
+                "retirado": False,
+            })
+
+        retirados_grupo = [
+            d for d in dpas_retirados
+            if (d.id_carrera if d.id_carrera in carreras_map else None) == key
+        ]
+        retirados_grupo.sort(key=lambda d: (d.alumno.apellido, d.alumno.nombre))
+        for d in retirados_grupo:
+            matriz_filas.append({
+                **_arreglar_alumno(d),
+                "notas": [None] * len(matrices_ids),
+                "promedio": None,
+                "aprobada": False,
+                "elegible": False,
+                "estado": "Retirado",
+                "estado_notas": "Retirado",
+                "estado_pagos": "Retirado",
+                "retirado": True,
             })
 
         carreras_resultado.append({
@@ -201,8 +241,6 @@ def armar_contenido(db: Session, request: InformeNotasRequest) -> dict:
     if es_final:
         if not edicion_finalizada:
             raise HTTPException(status_code=400, detail="Informe final: la edicion no esta finalizada")
-        if not todas_notas:
-            raise HTTPException(status_code=400, detail="Informe final: faltan notas por cargar")
 
     total_alumnos = 0
     aprobados = 0

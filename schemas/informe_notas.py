@@ -4,12 +4,13 @@ from pydantic import BaseModel
 
 
 class InformeNotasRequest(BaseModel):
-    """Solicitud de generación de informe de notas (formato horizontal por carrera).
+    """Solicitud de generación de informe de notas (matriz horizontal por carrera).
 
     - tipo 'borrador': columnas = módulos seleccionados (pueden ser menos que la edición),
-      no emite certificados, marca de agua BORRADOR. Pueden generarse varias tandas.
-    - tipo 'final': columnas = todos los módulos de la edición, único por edición,
-      emite certificados a los alumnos completos. Sin marca de agua.
+      no consume tanda ni emite certificados; marca de agua BORRADOR. Varios por edición.
+    - tipo 'final': columnas = todos los módulos de la edición, una TANDA por informe
+      (lote de alumnos completos certificables). Cada nueva tanda continúa la secuencia
+      (max+1) por edición y emite los certificados de sus alumnos completos.
     """
 
     id_programa_version_edicion: int
@@ -40,6 +41,9 @@ class InformeMatrizFila(BaseModel):
     aprobada: bool
     elegible: bool
     estado: str
+    estado_notas: str | None = None
+    estado_pagos: str | None = None
+    retirado: bool = False
 
 
 class InformeCarrera(BaseModel):
@@ -60,7 +64,7 @@ class InformeResumen(BaseModel):
 class InformeNotasResponse(BaseModel):
     id_informe: int
     id_programa_version_edicion: int
-    numero_tanda: int
+    numero_tanda: int | None = None
     tipo: str
     fecha_emision: date
     generado_at: datetime | None

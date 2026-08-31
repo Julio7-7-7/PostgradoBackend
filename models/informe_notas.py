@@ -13,7 +13,7 @@ class InformeNotas(Base):
 
     id_informe = Column(Integer, primary_key=True, index=True, autoincrement=True)
     id_programa_version_edicion = Column(Integer, ForeignKey("programa_version_edicion.id_programa_version_edicion"), nullable=False)
-    numero_tanda = Column(Integer, nullable=False)
+    numero_tanda = Column(Integer, nullable=True)
     tipo = Column(String(20), nullable=False, default="borrador")
     fecha_emision = Column(Date, nullable=False, default=func.current_date())
     generado_at = Column(DateTime, server_default=func.now(), nullable=True)

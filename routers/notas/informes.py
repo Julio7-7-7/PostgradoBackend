@@ -42,10 +42,11 @@ def _serializar_informe(informe: InformeNotas, cert_count: int = 0) -> dict:
 
 
 def _siguiente_tanda(db: Session, id_edicion: int) -> int:
-    ultimo = db.query(InformeNotas).filter(
-        InformeNotas.id_programa_version_edicion == id_edicion
-    ).order_by(InformeNotas.numero_tanda.desc()).first()
-    return (ultimo.numero_tanda + 1) if ultimo else 1
+    ultimo = db.query(func.max(InformeNotas.numero_tanda)).filter(
+        InformeNotas.id_programa_version_edicion == id_edicion,
+        InformeNotas.numero_tanda.isnot(None),
+    ).scalar()
+    return (ultimo or 0) + 1
 
 
 def _certificados_por_informe(db: Session, id_informe: int) -> int:
@@ -61,7 +62,7 @@ def _nombre_usuario(db: Session, id_usuario: int) -> str | None:
         return None
     for perfil in (usuario.administrativo, usuario.docente, usuario.alumno):
         if perfil:
-            nombre = f"{perfil.apellido}, {perfil.nombre}".strip(", ")
+            nombre = f"{perfil.nombre} {perfil.apellido}".strip()
             return nombre if nombre else None
     return None
 
@@ -75,18 +76,17 @@ def generar_informe(
     contenido = armar_contenido(db, data)
     es_final = data.tipo == "final"
 
+    numero_tanda = None
     if es_final:
-        final_existente = db.query(InformeNotas).filter(
-            InformeNotas.id_programa_version_edicion == data.id_programa_version_edicion,
-            InformeNotas.tipo == "final",
-        ).first()
-        if final_existente:
-            raise HTTPException(
-                status_code=400,
-                detail="El informe final de esta edicion ya fue generado",
-            )
+        numero_tanda = _siguiente_tanda(db, data.id_programa_version_edicion)
+        pve, _, _ = resolver_edicion(db, data.id_programa_version_edicion)
+        if pve.estado != "finalizado":
+            raise HTTPException(status_code=400, detail="Informe final: la edicion no esta finalizada")
+        dpas = {d.id_alumno: d for d in _dpas_por_edicion(db, data.id_programa_version_edicion)}
+        elegibles = _elegibles_final(db, data.id_programa_version_edicion, contenido, dpas)
+        if not elegibles:
+            raise HTTPException(status_code=400, detail="No hay alumnos elegibles para emitir una tanda")
 
-    numero_tanda = _siguiente_tanda(db, data.id_programa_version_edicion)
     alumnos_ids = sorted({
         a["id_alumno"]
         for c in contenido["carreras"]
@@ -112,9 +112,6 @@ def generar_informe(
 
     cert_count = 0
     if es_final:
-        pve, _, _ = resolver_edicion(db, data.id_programa_version_edicion)
-        dpas = {d.id_alumno: d for d in _dpas_por_edicion(db, data.id_programa_version_edicion)}
-        elegibles = _elegibles_final(db, data.id_programa_version_edicion, contenido, dpas)
         numero = _siguiente_numero_certificado(db, data.id_programa_version_edicion)
         now = datetime.now(timezone.utc)
         for alumno_id in elegibles:
@@ -187,7 +184,7 @@ def informes_por_edicion(
 ):
     informes = db.query(InformeNotas).filter(
         InformeNotas.id_programa_version_edicion == id_edicion
-    ).order_by(InformeNotas.numero_tanda.desc()).all()
+    ).order_by(InformeNotas.generado_at.desc()).all()
     return [
         _serializar_informe(i, _certificados_por_informe(db, i.id_informe))
         for i in informes
