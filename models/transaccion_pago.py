@@ -13,6 +13,7 @@ class TransaccionPago(Base):
     monto_total = Column(Numeric(10, 2), nullable=False)
     fecha_pago = Column(Date, nullable=False)
     comprobante = Column(String(500), nullable=True)
+    codigo_boleta = Column(String(50), nullable=True)
     estado = Column(String(20), nullable=False, default="confirmado")
     motivo_anulacion = Column(Text, nullable=True)
     anulado_por_id_usuario = Column(Integer, ForeignKey("usuarios.id_usuario"), nullable=True)

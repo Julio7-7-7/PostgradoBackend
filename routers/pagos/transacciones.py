@@ -27,6 +27,7 @@ def _serializar_transaccion(t: TransaccionPago) -> dict:
         "monto_total": float(t.monto_total),
         "fecha_pago": str(t.fecha_pago),
         "comprobante": t.comprobante,
+        "codigo_boleta": t.codigo_boleta,
         "estado": t.estado,
         "motivo_anulacion": t.motivo_anulacion,
         "anulado_por_id_usuario": t.anulado_por_id_usuario,

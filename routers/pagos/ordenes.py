@@ -244,6 +244,10 @@ def pagar_orden(
     if es_alumno_actual(current_user, detalle.id_alumno, db):
         raise HTTPException(status_code=403, detail="No podés registrar pagos para tu propia inscripción")
 
+    codigo_boleta = (data.codigo_boleta or "").strip()
+    if not codigo_boleta:
+        raise HTTPException(status_code=400, detail="El código de boleta es obligatorio")
+
     comprobante = None
     if data.comprobante:
         comprobante = guardar_documento_base64(data.comprobante, media_subdir="pagos")
@@ -254,6 +258,7 @@ def pagar_orden(
         monto_total=float(orden.monto_total),
         fecha_pago=data.fecha_pago,
         comprobante=comprobante,
+        codigo_boleta=codigo_boleta,
         estado="confirmado",
         creado_por_id_usuario=current_user.id_usuario,
     )

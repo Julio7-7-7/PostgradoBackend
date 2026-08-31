@@ -16,6 +16,7 @@ class TransaccionPagoResponse(BaseModel):
     monto_total: float
     fecha_pago: date
     comprobante: str | None
+    codigo_boleta: str | None = None
     estado: str
     motivo_anulacion: str | None
     anulado_por_id_usuario: int | None
