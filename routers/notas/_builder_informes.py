@@ -20,12 +20,20 @@ NOTA_APROBATORIA = 66
 
 def _arreglar_alumno(d) -> dict:
     a = d.alumno
+    modalidad_nombre = d.modalidad_academica.nombre_modalidad if d.modalidad_academica else None
+    es_ec = (
+        bool(d.id_carrera)
+        or bool(modalidad_nombre and modalidad_nombre.strip().lower() == "educación continua")
+    )
     return {
         "id_alumno": a.id_alumno,
         "id_detalle_programa_alumno": d.id_detalle_programa_alumno,
         "nombre": a.nombre,
         "apellido": a.apellido,
         "ci": a.ci,
+        "numero_registro": a.numero_registro,
+        "modalidad_nombre": modalidad_nombre,
+        "es_educacion_continua": es_ec,
     }
 
 
@@ -142,7 +150,8 @@ def armar_contenido(db: Session, request: InformeNotasRequest) -> dict:
         carreras_map[c.id_carrera] = {"id_carrera": c.id_carrera, "nombre": c.nombre}
 
     dpas = db.query(DetalleProgramaAlumno).options(
-        joinedload(DetalleProgramaAlumno.alumno)
+        joinedload(DetalleProgramaAlumno.alumno),
+        joinedload(DetalleProgramaAlumno.modalidad_academica),
     ).filter(
         DetalleProgramaAlumno.id_programa_version_edicion == request.id_programa_version_edicion,
         DetalleProgramaAlumno.estado.in_(ESTADOS_INCLUIDOS),
@@ -153,7 +162,8 @@ def armar_contenido(db: Session, request: InformeNotasRequest) -> dict:
     dpas_retirados = []
     if not es_final:
         dpas_retirados = db.query(DetalleProgramaAlumno).options(
-            joinedload(DetalleProgramaAlumno.alumno)
+            joinedload(DetalleProgramaAlumno.alumno),
+            joinedload(DetalleProgramaAlumno.modalidad_academica),
         ).filter(
             DetalleProgramaAlumno.id_programa_version_edicion == request.id_programa_version_edicion,
             DetalleProgramaAlumno.estado == "retirado",

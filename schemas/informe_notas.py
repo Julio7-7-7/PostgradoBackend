@@ -36,6 +36,9 @@ class InformeMatrizFila(BaseModel):
     nombre: str
     apellido: str
     ci: str | None
+    numero_registro: str | None = None
+    modalidad_nombre: str | None = None
+    es_educacion_continua: bool = False
     notas: list[float | None]
     promedio: float | None
     aprobada: bool

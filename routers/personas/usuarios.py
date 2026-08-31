@@ -300,6 +300,7 @@ def crear_usuario(
                     apellido=data.apellido.strip(),
                     celular=data.celular,
                     correo=email_norm,
+                    numero_registro=data.numero_registro,
                     fecha_nacimiento=data.fecha_nacimiento,
                     genero=data.genero,
                     id_usuario=usuario.id_usuario,
