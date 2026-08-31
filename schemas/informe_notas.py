@@ -4,30 +4,24 @@ from pydantic import BaseModel
 
 
 class InformeNotasRequest(BaseModel):
+    """Solicitud de generación de informe de notas (matriz horizontal por carrera).
+
+    - tipo 'borrador': columnas = módulos seleccionados (pueden ser menos que la edición),
+      no consume tanda ni emite certificados; marca de agua BORRADOR. Varios por edición.
+    - tipo 'final': columnas = todos los módulos de la edición, una TANDA por informe
+      (lote de alumnos completos certificables). Cada nueva tanda continúa la secuencia
+      (max+1) por edición y emite los certificados de sus alumnos completos.
+    """
+
     id_programa_version_edicion: int
-    tipo: Literal["parcial", "final"] = "parcial"
+    tipo: Literal["borrador", "final"] = "borrador"
     id_modulos: list[int] = []
     id_carrera: int | None = None
 
 
-class InformeAlumnoNota(BaseModel):
-    id_alumno: int
-    id_detalle_programa_alumno: int
-    nombre: str
-    apellido: str
-    ci: str | None
-    nota: float | None
-    aprobada: bool
-
-
-class InformeModulo(BaseModel):
-    id_detalle_programa_modulo: int
-    nombre_modulo: str
-    sigla: str
-    fecha_inicio: date | None
-    fecha_fin: date | None
-    docente: str | None
-    alumnos: list[InformeAlumnoNota]
+class CertificadoEmitirRequest(BaseModel):
+    id_programa_version_edicion: int
+    alumnos_ids: list[int]
 
 
 class InformeMatrizColumna(BaseModel):
@@ -43,15 +37,18 @@ class InformeMatrizFila(BaseModel):
     apellido: str
     ci: str | None
     notas: list[float | None]
+    promedio: float | None
     aprobada: bool
     elegible: bool
-    motivo_exclusion: str | None
+    estado: str
+    estado_notas: str | None = None
+    estado_pagos: str | None = None
+    retirado: bool = False
 
 
 class InformeCarrera(BaseModel):
     id_carrera: int | None
     nombre: str
-    modulos: list[InformeModulo] = []
     matriz_columnas: list[InformeMatrizColumna] = []
     matriz_filas: list[InformeMatrizFila] = []
 
@@ -60,28 +57,14 @@ class InformeResumen(BaseModel):
     total_alumnos: int
     total_aprobados: int
     total_reprobados: int
-    elegibles: int
+    completos: int
     carreras: list[dict]
-
-
-class InformePreviewResponse(BaseModel):
-    tipo: str
-    id_programa_version_edicion: int
-    edicion_desc: str
-    programa_nombre: str
-    version: int
-    numero_tanda: int
-    timestamp: datetime
-    carreras: list[InformeCarrera]
-    todas_notas: bool
-    edicion_finalizada: bool
-    resumen: InformeResumen
 
 
 class InformeNotasResponse(BaseModel):
     id_informe: int
     id_programa_version_edicion: int
-    numero_tanda: int
+    numero_tanda: int | None = None
     tipo: str
     fecha_emision: date
     generado_at: datetime | None
@@ -89,5 +72,7 @@ class InformeNotasResponse(BaseModel):
     observaciones: str | None
     contenido: dict | None
     certificados_count: int = 0
+    emitido_por: int | None = None
+    emitido_por_nombre: str | None = None
     created_at: datetime
     updated_at: datetime

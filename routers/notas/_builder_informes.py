@@ -9,11 +9,13 @@ from models.detalle_programa_modulo import DetalleProgramaModulo
 from models.detalle_programa_alumno import DetalleProgramaAlumno
 from models.nota import Nota
 from models.carrera import Carrera
-from models.contratacion_docente import ContratacionDocente
 from models.certificado_notas import CertificadoNotas
 from schemas.informe_notas import InformeNotasRequest
+from schemas.enums import clasificar_nota, redondear_nota
 
 ESTADOS_INCLUIDOS = ("inscrito", "incorporado", "finalizado", "graduado")
+
+NOTA_APROBATORIA = 66
 
 
 def _arreglar_alumno(d) -> dict:
@@ -54,21 +56,8 @@ def modulos_edicion(db: Session, id_edicion: int):
     ).order_by(DetalleProgramaModulo.orden).all()
 
 
-def nombre_docente(db: Session, id_dpm: int):
-    contratacion = db.query(ContratacionDocente).options(
-        joinedload(ContratacionDocente.docente)
-    ).filter(
-        ContratacionDocente.id_detalle_modulo == id_dpm,
-        ContratacionDocente.estado != "truncado",
-    ).first()
-    if contratacion and contratacion.docente:
-        d = contratacion.docente
-        nombre = f"{d.nombre} {d.apellido}".strip()
-        return nombre if nombre else None
-    return None
-
-
 def calcular_elegibilidad(db: Session, id_edicion: int, dpas: list, nota_map: dict, id_dmps: list) -> dict:
+    """Cruce de elegibilidad por alumno: notas completas y aprobadas + pagos al día + sin certificado previo."""
     pagos_incompletos = set()
     con_certificado = set()
     if dpas:
@@ -91,28 +80,40 @@ def calcular_elegibilidad(db: Session, id_edicion: int, dpas: list, nota_map: di
     resultado = {}
     for d in dpas:
         notas = [nota_map.get((d.id_detalle_programa_alumno, m)) for m in id_dmps]
-        todas = all(n is not None for n in notas)
-        aprobada = todas and all(n >= 10 for n in notas)
+        cargadas = [n for n in notas if n is not None]
+        todas = len(cargadas) == len(notas)
+        aprobada = todas and all(n >= NOTA_APROBATORIA for n in notas)
 
-        motivo = None
+        estado = None
         elegible = False
-        if todas and aprobada:
-            if d.id_detalle_programa_alumno in pagos_incompletos:
-                motivo = "Pagos incompletos"
-            elif d.id_alumno in con_certificado:
-                motivo = "Ya cuenta con certificado"
-            else:
-                elegible = True
-        elif not todas:
-            motivo = "Notas pendientes"
+        if not todas:
+            estado = "Notas pendientes"
+        elif not aprobada:
+            estado = "Notas reprobadas"
+        elif d.id_detalle_programa_alumno in pagos_incompletos:
+            estado = "Pagos incompletos"
+        elif d.id_alumno in con_certificado:
+            estado = "Con certificado previo"
         else:
-            motivo = "Notas reprobadas"
+            estado = "Completo"
+            elegible = True
+
+        if not todas:
+            estado_notas = "Pendientes"
+        elif not aprobada:
+            estado_notas = "Reprobadas"
+        else:
+            estado_notas = "Aprobadas"
+        estado_pagos = "Pendiente" if d.id_detalle_programa_alumno in pagos_incompletos else "Completo"
 
         resultado[d.id_detalle_programa_alumno] = {
             "notas": notas,
             "aprobada": aprobada,
             "elegible": elegible,
-            "motivo_exclusion": motivo,
+            "estado": estado,
+            "estado_notas": estado_notas,
+            "estado_pagos": estado_pagos,
+            "promedio": redondear_nota(sum(cargadas) / len(cargadas)) if cargadas else None,
         }
     return resultado
 
@@ -149,6 +150,15 @@ def armar_contenido(db: Session, request: InformeNotasRequest) -> dict:
     if not dpas:
         raise HTTPException(status_code=400, detail="La edicion no tiene alumnos inscritos")
 
+    dpas_retirados = []
+    if not es_final:
+        dpas_retirados = db.query(DetalleProgramaAlumno).options(
+            joinedload(DetalleProgramaAlumno.alumno)
+        ).filter(
+            DetalleProgramaAlumno.id_programa_version_edicion == request.id_programa_version_edicion,
+            DetalleProgramaAlumno.estado == "retirado",
+        ).all()
+
     dpa_ids = [d.id_detalle_programa_alumno for d in dpas]
     nota_map = {}
     if id_dmps:
@@ -172,52 +182,53 @@ def armar_contenido(db: Session, request: InformeNotasRequest) -> dict:
             continue
         alumnos_grupo.sort(key=lambda d: (d.alumno.apellido, d.alumno.nombre))
 
-        modulos_data = []
-        for dpm in seleccion:
-            filas = []
-            for d in alumnos_grupo:
-                nota = nota_map.get((d.id_detalle_programa_alumno, dpm.id_detalle_programa_modulo))
-                if nota is None and not es_final:
-                    continue
-                filas.append({
-                    **_arreglar_alumno(d),
-                    "nota": nota,
-                    "aprobada": nota is not None and nota >= 10,
-                })
-            modulos_data.append({
+        matriz_columnas = [
+            {
                 "id_detalle_programa_modulo": dpm.id_detalle_programa_modulo,
                 "nombre_modulo": _nombre_modulo(dpm),
                 "sigla": dpm.modulo.sigla if dpm.modulo else "",
-                "fecha_inicio": str(dpm.fecha_inicio) if dpm.fecha_inicio else None,
-                "fecha_fin": str(dpm.fecha_fin) if dpm.fecha_fin else None,
-                "docente": nombre_docente(db, dpm.id_detalle_programa_modulo),
-                "alumnos": filas,
+            }
+            for dpm in seleccion
+        ]
+        matrices_ids = [c["id_detalle_programa_modulo"] for c in matriz_columnas]
+
+        matriz_filas = []
+        for d in alumnos_grupo:
+            det = elegibilidad[d.id_detalle_programa_alumno]
+            notas_col = [nota_map.get((d.id_detalle_programa_alumno, m)) for m in matrices_ids]
+            matriz_filas.append({
+                **_arreglar_alumno(d),
+                "notas": notas_col,
+                "promedio": det["promedio"],
+                "aprobada": det["aprobada"],
+                "elegible": det["elegible"],
+                "estado": det["estado"],
+                "estado_notas": det["estado_notas"],
+                "estado_pagos": det["estado_pagos"],
+                "retirado": False,
             })
 
-        matriz_columnas = []
-        matriz_filas = []
-        if es_final:
-            matriz_columnas = [{
-                "id_detalle_programa_modulo": dpm.id_detalle_programa_modulo,
-                "nombre_modulo": _nombre_modulo(dpm),
-                "sigla": dpm.modulo.sigla if dpm.modulo else "",
-            } for dpm in todos_dmps]
-            matrices_ids = [c["id_detalle_programa_modulo"] for c in matriz_columnas]
-            for d in alumnos_grupo:
-                det = elegibilidad[d.id_detalle_programa_alumno]
-                notas_col = [nota_map.get((d.id_detalle_programa_alumno, m)) for m in matrices_ids]
-                matriz_filas.append({
-                    **_arreglar_alumno(d),
-                    "notas": notas_col,
-                    "aprobada": all(n is not None and n >= 10 for n in notas_col),
-                    "elegible": det["elegible"],
-                    "motivo_exclusion": det["motivo_exclusion"],
-                })
+        retirados_grupo = [
+            d for d in dpas_retirados
+            if (d.id_carrera if d.id_carrera in carreras_map else None) == key
+        ]
+        retirados_grupo.sort(key=lambda d: (d.alumno.apellido, d.alumno.nombre))
+        for d in retirados_grupo:
+            matriz_filas.append({
+                **_arreglar_alumno(d),
+                "notas": [None] * len(matrices_ids),
+                "promedio": None,
+                "aprobada": False,
+                "elegible": False,
+                "estado": "Retirado",
+                "estado_notas": "Retirado",
+                "estado_pagos": "Retirado",
+                "retirado": True,
+            })
 
         carreras_resultado.append({
             "id_carrera": id_carrera,
             "nombre": carreras_map[key]["nombre"],
-            "modulos": modulos_data,
             "matriz_columnas": matriz_columnas,
             "matriz_filas": matriz_filas,
         })
@@ -230,26 +241,20 @@ def armar_contenido(db: Session, request: InformeNotasRequest) -> dict:
     if es_final:
         if not edicion_finalizada:
             raise HTTPException(status_code=400, detail="Informe final: la edicion no esta finalizada")
-        if not todas_notas:
-            raise HTTPException(status_code=400, detail="Informe final: faltan notas por cargar")
 
     total_alumnos = 0
     aprobados = 0
-    elegibles = 0
+    completos = 0
     resumen_carreras = []
     for g in carreras_resultado:
-        if es_final:
-            n = len(g["matriz_filas"])
-            ap = sum(1 for f in g["matriz_filas"] if f["aprobada"])
-            el = sum(1 for f in g["matriz_filas"] if f["elegible"])
-        else:
-            n = sum(len(m["alumnos"]) for m in g["modulos"])
-            ap = sum(1 for m in g["modulos"] for f in m["alumnos"] if f["aprobada"])
-            el = 0
+        filas = g["matriz_filas"]
+        n = len(filas)
+        ap = sum(1 for f in filas if f["aprobada"])
+        com = sum(1 for f in filas if f["elegible"])
         total_alumnos += n
         aprobados += ap
-        elegibles += el
-        resumen_carreras.append({"id_carrera": g["id_carrera"], "nombre": g["nombre"], "alumnos": n, "elegibles": el})
+        completos += com
+        resumen_carreras.append({"id_carrera": g["id_carrera"], "nombre": g["nombre"], "alumnos": n, "completos": com})
 
     return {
         "tipo": request.tipo,
@@ -267,7 +272,54 @@ def armar_contenido(db: Session, request: InformeNotasRequest) -> dict:
             "total_alumnos": total_alumnos,
             "total_aprobados": aprobados,
             "total_reprobados": max(total_alumnos - aprobados, 0),
-            "elegibles": elegibles,
+            "completos": completos,
             "carreras": resumen_carreras,
         },
+    }
+
+
+def datos_certificado(db: Session, id_edicion: int, id_alumno: int) -> dict | None:
+    """Snapshot congelado del alumno en la edición para el certificado de notas."""
+    pve, pv, programa = resolver_edicion(db, id_edicion)
+    d = db.query(DetalleProgramaAlumno).filter(
+        DetalleProgramaAlumno.id_programa_version_edicion == id_edicion,
+        DetalleProgramaAlumno.id_alumno == id_alumno,
+    ).first()
+    if not d:
+        return None
+
+    dmps = modulos_edicion(db, id_edicion)
+    nota_map = {
+        n.id_detalle_programa_modulo: float(n.nota)
+        for n in db.query(Nota).filter(Nota.id_detalle_programa_alumno == d.id_detalle_programa_alumno).all()
+    }
+
+    modulos = []
+    for dpm in dmps:
+        nota = nota_map.get(dpm.id_detalle_programa_modulo)
+        modulos.append({
+            "nombre": _nombre_modulo(dpm),
+            "sigla": dpm.modulo.sigla if dpm.modulo else "",
+            "nota": nota,
+            "aprobada": nota is not None and nota >= NOTA_APROBATORIA,
+            "clasificacion": clasificar_nota(nota).value if nota is not None else None,
+        })
+
+    notas = [m["nota"] for m in modulos if m["nota"] is not None]
+    return {
+        "programa": programa.nombre_programa if programa else "",
+        "version": pv.version if pv else 0,
+        "edicion": pve.edicion,
+        "semestre": pve.semestre,
+        "anio": pve.anio,
+        "modalidad": d.modalidad_academica.nombre_modalidad if d.modalidad_academica else None,
+        "carrera": d.carrera.nombre if d.carrera else None,
+        "estado_alumno": d.estado,
+        "alumno": {
+            "nombre": d.alumno.nombre,
+            "apellido": d.alumno.apellido,
+            "ci": d.alumno.ci,
+        },
+        "modulos": modulos,
+        "promedio": redondear_nota(sum(notas) / len(notas)) if notas else None,
     }

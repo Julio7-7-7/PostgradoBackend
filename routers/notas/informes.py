@@ -1,16 +1,18 @@
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
 from dependencies import get_current_user, require_permiso
 from models.informe_notas import InformeNotas
 from models.certificado_notas import CertificadoNotas
+from models.usuario import Usuario
 from schemas.auth import UserResponse
 from schemas.informe_notas import InformeNotasRequest
 from routers.notas._builder_informes import (
-    armar_contenido, resolver_edicion, calcular_elegibilidad,
+    armar_contenido, resolver_edicion, calcular_elegibilidad, datos_certificado,
 )
 
 router = APIRouter(
@@ -32,16 +34,19 @@ def _serializar_informe(informe: InformeNotas, cert_count: int = 0) -> dict:
         "observaciones": informe.observaciones,
         "contenido": informe.contenido,
         "certificados_count": cert_count,
+        "emitido_por": informe.emitido_por,
+        "emitido_por_nombre": informe.emitido_por_nombre,
         "created_at": informe.created_at.isoformat() if informe.created_at else None,
         "updated_at": informe.updated_at.isoformat() if informe.updated_at else None,
     }
 
 
 def _siguiente_tanda(db: Session, id_edicion: int) -> int:
-    ultimo = db.query(InformeNotas).filter(
-        InformeNotas.id_programa_version_edicion == id_edicion
-    ).order_by(InformeNotas.numero_tanda.desc()).first()
-    return (ultimo.numero_tanda + 1) if ultimo else 1
+    ultimo = db.query(func.max(InformeNotas.numero_tanda)).filter(
+        InformeNotas.id_programa_version_edicion == id_edicion,
+        InformeNotas.numero_tanda.isnot(None),
+    ).scalar()
+    return (ultimo or 0) + 1
 
 
 def _certificados_por_informe(db: Session, id_informe: int) -> int:
@@ -50,21 +55,16 @@ def _certificados_por_informe(db: Session, id_informe: int) -> int:
     ).count()
 
 
-@router.post("/preview")
-def preview_informe(
-    data: InformeNotasRequest,
-    db: Session = Depends(get_db),
-    current_user: UserResponse = Depends(require_permiso("pagos.ver")),
-):
-    contenido = armar_contenido(db, data)
-    pve, _, _ = resolver_edicion(db, data.id_programa_version_edicion)
-    return {
-        **contenido,
-        "numero_tanda": _siguiente_tanda(db, data.id_programa_version_edicion),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "es_borrador": True,
-        "edicion_estado": pve.estado,
-    }
+def _nombre_usuario(db: Session, id_usuario: int) -> str | None:
+    """Nombre y apellido de la persona asociada al usuario (administrativo, docente o alumno)."""
+    usuario = db.query(Usuario).filter(Usuario.id_usuario == id_usuario).first()
+    if not usuario:
+        return None
+    for perfil in (usuario.administrativo, usuario.docente, usuario.alumno):
+        if perfil:
+            nombre = f"{perfil.nombre} {perfil.apellido}".strip()
+            return nombre if nombre else None
+    return None
 
 
 @router.post("/", status_code=201)
@@ -76,24 +76,24 @@ def generar_informe(
     contenido = armar_contenido(db, data)
     es_final = data.tipo == "final"
 
+    numero_tanda = None
     if es_final:
-        final_existente = db.query(InformeNotas).filter(
-            InformeNotas.id_programa_version_edicion == data.id_programa_version_edicion,
-            InformeNotas.tipo == "final",
-        ).first()
-        if final_existente:
-            raise HTTPException(
-                status_code=400,
-                detail="El informe final de esta edicion ya fue generado",
-            )
+        numero_tanda = _siguiente_tanda(db, data.id_programa_version_edicion)
+        pve, _, _ = resolver_edicion(db, data.id_programa_version_edicion)
+        if pve.estado != "finalizado":
+            raise HTTPException(status_code=400, detail="Informe final: la edicion no esta finalizada")
+        dpas = {d.id_alumno: d for d in _dpas_por_edicion(db, data.id_programa_version_edicion)}
+        elegibles = _elegibles_final(db, data.id_programa_version_edicion, contenido, dpas)
+        if not elegibles:
+            raise HTTPException(status_code=400, detail="No hay alumnos elegibles para emitir una tanda")
 
-    numero_tanda = _siguiente_tanda(db, data.id_programa_version_edicion)
     alumnos_ids = sorted({
         a["id_alumno"]
         for c in contenido["carreras"]
-        for m in c["modulos"]
-        for a in m["alumnos"]
+        for a in c["matriz_filas"]
     })
+
+    emitido_por_nombre = _nombre_usuario(db, current_user.id_usuario)
 
     informe = InformeNotas(
         id_programa_version_edicion=data.id_programa_version_edicion,
@@ -104,22 +104,31 @@ def generar_informe(
         alumnos_ids=alumnos_ids,
         contenido=contenido,
         estado="enviado",
+        emitido_por=current_user.id_usuario,
+        emitido_por_nombre=emitido_por_nombre,
     )
     db.add(informe)
     db.flush()
 
     cert_count = 0
     if es_final:
-        pve, _, _ = resolver_edicion(db, data.id_programa_version_edicion)
-        dpas = {d.id_alumno: d for d in _dpas_por_edicion(db, data.id_programa_version_edicion)}
-        elegibles = _elegibles_final(db, data.id_programa_version_edicion, contenido, dpas)
+        numero = _siguiente_numero_certificado(db, data.id_programa_version_edicion)
+        now = datetime.now(timezone.utc)
         for alumno_id in elegibles:
             db.add(CertificadoNotas(
                 id_alumno=alumno_id,
                 id_programa_version_edicion=data.id_programa_version_edicion,
                 id_informe=informe.id_informe,
                 fecha_emision=date.today(),
+                datos=datos_certificado(db, data.id_programa_version_edicion, alumno_id),
+                procedencia="informe",
+                emitido_por=current_user.id_usuario,
+                emitido_at=now,
+                numero_certificado=numero,
+                codigo=f"CERT-{pve.anio}-{numero:03d}",
+                n_impresiones=0,
             ))
+            numero += 1
             cert_count += 1
 
     db.commit()
@@ -134,14 +143,21 @@ def _dpas_por_edicion(db: Session, id_edicion: int):
     ).all()
 
 
+def _siguiente_numero_certificado(db: Session, id_edicion: int) -> int:
+    ultimo = db.query(func.max(CertificadoNotas.numero_certificado)).filter(
+        CertificadoNotas.id_programa_version_edicion == id_edicion,
+        CertificadoNotas.numero_certificado.isnot(None),
+    ).scalar()
+    return (ultimo or 0) + 1
+
+
 def _elegibles_final(db: Session, id_edicion: int, contenido: dict, dpas_map: dict) -> list[int]:
+    """Alumnos que reciben certificado con el informe final (cruza la matriz congelada)."""
     dpas = [d for d in dpas_map.values()
             if d.estado in ("inscrito", "incorporado", "finalizado", "graduado")]
     if not dpas:
         return []
     nota_map = {}
-    import textwrap
-    # construir mapa desde el contenido congelado (matriz por carrera)
     for c in contenido["carreras"]:
         for f in c["matriz_filas"]:
             id_dpa = f["id_detalle_programa_alumno"]
@@ -168,7 +184,7 @@ def informes_por_edicion(
 ):
     informes = db.query(InformeNotas).filter(
         InformeNotas.id_programa_version_edicion == id_edicion
-    ).order_by(InformeNotas.numero_tanda.desc()).all()
+    ).order_by(InformeNotas.generado_at.desc()).all()
     return [
         _serializar_informe(i, _certificados_por_informe(db, i.id_informe))
         for i in informes
@@ -187,38 +203,3 @@ def obtener_informe(
     if not informe:
         raise HTTPException(status_code=404, detail="Informe no encontrado")
     return _serializar_informe(informe, _certificados_por_informe(db, id_informe))
-
-
-@router.get("/elegibles/{id_edicion}")
-def alumnos_elegibles(
-    id_edicion: int,
-    db: Session = Depends(get_db),
-    current_user: UserResponse = Depends(require_permiso("pagos.ver")),
-):
-    pve, _, _ = resolver_edicion(db, id_edicion)
-    dpas = _dpas_por_edicion(db, id_edicion)
-    dpas = [d for d in dpas if d.estado in ("inscrito", "incorporado", "finalizado", "graduado")]
-    nota_map = {}
-    from models.nota import Nota
-    for n in db.query(Nota).filter(Nota.id_detalle_programa_alumno.in_(
-        [d.id_detalle_programa_alumno for d in dpas]
-    )).all():
-        nota_map[(n.id_detalle_programa_alumno, n.id_detalle_programa_modulo)] = float(n.nota)
-    from models.detalle_programa_modulo import DetalleProgramaModulo
-    all_dmps = [d.id_detalle_programa_modulo for d in db.query(DetalleProgramaModulo).filter(
-        DetalleProgramaModulo.id_programa_version_edicion == id_edicion
-    ).all()]
-    eleg = calcular_elegibilidad(db, id_edicion, dpas, nota_map, all_dmps)
-    resultado = []
-    for d in dpas:
-        det = eleg.get(d.id_detalle_programa_alumno, {})
-        resultado.append({
-            "id_alumno": d.id_alumno,
-            "id_detalle_programa_alumno": d.id_detalle_programa_alumno,
-            "nombre": d.alumno.nombre,
-            "apellido": d.alumno.apellido,
-            "ci": d.alumno.ci,
-            "elegible": det.get("elegible", False),
-            "motivo_exclusion": det.get("motivo_exclusion"),
-        })
-    return {"id_programa_version_edicion": id_edicion, "total_elegibles": sum(1 for r in resultado if r["elegible"]), "alumnos": resultado}
