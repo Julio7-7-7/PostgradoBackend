@@ -62,7 +62,7 @@ def _nombre_usuario(db: Session, id_usuario: int) -> str | None:
         return None
     for perfil in (usuario.administrativo, usuario.docente, usuario.alumno):
         if perfil:
-            nombre = f"{perfil.nombre} {perfil.apellido}".strip()
+            nombre = f"{perfil.apellido} {perfil.nombre}".strip()
             return nombre if nombre else None
     return None
 
