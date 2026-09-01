@@ -40,3 +40,4 @@ from models.documento_solicitud import DocumentoSolicitud
 from models.solicitud_requisito import SolicitudRequisito
 from models.solicitud_incorporacion import SolicitudIncorporacion
 from models.solicitud_migracion import SolicitudMigracion
+from models.backup import Backup

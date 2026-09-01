@@ -17,6 +17,8 @@ from routers.docentes import (
 )
 from routers.notas import calificaciones, informes, certificados
 from routers.pagos import matriz, transacciones, ordenes
+from routers.reportes import reportes
+from routers.sistema import backups
 from routers import dashboard
 
 all_routers = [
@@ -60,6 +62,10 @@ all_routers = [
     matriz.router,
     transacciones.router,
     ordenes.router,
+    # Reportes
+    reportes.router,
+    # Sistema
+    backups.router,
     # Dashboard
     dashboard.router,
 ]

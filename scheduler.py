@@ -1,9 +1,11 @@
+import os
 from datetime import date
 from apscheduler.schedulers.background import BackgroundScheduler
 from database import SessionLocal
 from models.detalle_programa_modulo import DetalleProgramaModulo
 from models.historial_modulo import HistorialModulo
 from routers._edition_state import actualizar_estado_edicion
+from backups_service import ejecutar_backup_automatico
 
 MOTIVO_AUTO_EN_CURSO = "Cambiado a estado en curso por fechas"
 MOTIVO_AUTO_FINALIZADO = "Cambiado a estado finalizado por fecha de fin"
@@ -76,6 +78,14 @@ def iniciar():
         hours=1,
         id="auto_estados_modulos",
         name="Auto actualizar estados de módulos según fechas",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        ejecutar_backup_automatico,
+        trigger="interval",
+        hours=int(os.getenv("BACKUP_INTERVAL_HOURS", "24")),
+        id="auto_backup_db",
+        name="Generar backup automático de base de datos y media",
         replace_existing=True,
     )
     scheduler.start()
