@@ -60,6 +60,10 @@ def seed():
         "notas.subir", "notas.ver", "notas.aprobar",
         "informes_notas.gestionar", "certificados.gestionar",
 
+        "reportes.ver", "reportes.generar",
+
+        "backups.ver", "backups.crear", "backups.restaurar", "backups.eliminar",
+
         "roles.gestionar",
         "usuarios.gestionar",
     ]
@@ -108,6 +112,7 @@ def seed():
             "documentos.revisar", "documentos.aprobar",
             "notas.ver", "notas.aprobar",
             "informes_notas.gestionar", "certificados.gestionar",
+            "reportes.ver", "reportes.generar",
             "historial.ver",
             "modalidades_academicas.ver",
             "carreras.ver",
@@ -172,6 +177,24 @@ def seed():
                     db.add(RolesPermiso(id_rol=rol.id_rol, id_permiso=perm.id_permiso))
                     db.commit()
         print(f"  ✅ Permisos asignados a: {nombre_rol}")
+
+    # Reconciliación: el rol legacy "Adm Informatico" (acceso total) debe tener
+    # el mismo set de permisos que "adm_informatico" (incluye reportes.*).
+    for nombre_rol_legacy in ("Adm Informatico",):
+        rol_legacy = db.query(Rol).filter(Rol.nombre == nombre_rol_legacy).first()
+        if rol_legacy:
+            for codigo in permisos:
+                perm = db.query(Permiso).filter(Permiso.codigo == codigo).first()
+                if not perm:
+                    continue
+                exists = db.query(RolesPermiso).filter(
+                    RolesPermiso.id_rol == rol_legacy.id_rol,
+                    RolesPermiso.id_permiso == perm.id_permiso,
+                ).first()
+                if not exists:
+                    db.add(RolesPermiso(id_rol=rol_legacy.id_rol, id_permiso=perm.id_permiso))
+                    db.commit()
+            print(f"  ✅ Permisos sincronizados a rol legacy: {nombre_rol_legacy}")
 
     modalidad_ed_continua = db.query(ModalidadAcademica).filter(
         ModalidadAcademica.nombre_modalidad == "Educación Continua"
@@ -545,6 +568,12 @@ def _descripcion_permiso(codigo: str) -> str:
         "tipos_solicitud.editar": "Editar tipos de solicitud",
         "informes_notas.gestionar": "Generar y gestionar informes de notas",
         "certificados.gestionar": "Generar certificados de notas",
+        "reportes.ver": "Consultar los reportes de gestión",
+        "reportes.generar": "Generar e imprimir reportes de gestión",
+        "backups.ver": "Consultar el historial de backups",
+        "backups.crear": "Generar backups de la base de datos y archivos",
+        "backups.restaurar": "Restaurar un backup (sobreescribe los datos)",
+        "backups.eliminar": "Eliminar backups",
         "roles.gestionar": "Gestionar roles y permisos",
         "usuarios.gestionar": "Gestionar usuarios del sistema",
     }
